@@ -1,0 +1,10 @@
+streamlit
+pandas
+numpy
+plotly
+matplotlib>=3.7.0
+seaborn>=0.12.0
+pyarrow
+beautifulsoup4
+requests
+fastparquet
