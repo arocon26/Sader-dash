@@ -204,8 +204,7 @@ def load_player_data(player_name, team_name, app_type="hitter"):
     if not df.empty and 'TaggedPitchType' in df.columns:
         df['TaggedPitchType'] = df['TaggedPitchType'].replace({
             'ChangeUp': 'Changeup', 
-            'One-Seam Fastball': 'Sinker',
-            'Sinker': 'Fastball'
+            'One-Seam Fastball': 'Sinker'
         })
     
     return df
