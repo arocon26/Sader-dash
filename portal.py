@@ -1208,25 +1208,26 @@ elif app == "NCAA Pitcher":
     # Step 3: Load ONLY this pitcher's data (lazy loaded!)
     data = load_player_data(selected_pitcher_raw, selected_team_full, app_type="pitcher")
     
-    # ---- Application Tabs ----
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["Performance Data", "Stuff Visuals", "Sequencing", "Usage", "Heatmaps", "Trends"])
+    # --- [NEW LOCATION] PLAYER BIO HEADER (ABOVE TABS) ---
+    if not data.empty:
+        p_info = data.iloc[0]
+        # Convert numeric bio info safely
+        p_height = p_info['Height_Pitcher'] if pd.notnull(p_info['Height_Pitcher']) else "N/A"
+        p_weight = f"{int(p_info['Weight_Pitcher'])} lbs" if pd.notnull(p_info['Weight_Pitcher']) else "N/A"
+        p_jersey = f"#{int(p_info['Jersey_Pitcher'])}" if pd.notnull(p_info['Jersey_Pitcher']) else ""
+        
+        # Display the Header
+        st.header(f"{selected_pitcher_fmt} {p_jersey}")
+        st.subheader(f"{selected_team_full} • {p_info['PitcherThrows']}HP")
+        st.write(f"**Physicals:** {p_height} | {p_weight}")
+        st.divider()
 
-    # ... rest of your tab code stays exactly the same ...
+    # ---- Application Tabs (NOW BELOW THE HEADER) ----
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["Performance Data", "Stuff Visuals", "Sequencing", "Usage", "Heatmaps", "Trends"])
 
     with tab1:
         if not data.empty:
-            # --- PLAYER BIO HEADER ---
-            p_info = data.iloc[0]
-            # Convert numeric bio info safely
-            p_height = p_info['Height_Pitcher'] if pd.notnull(p_info['Height_Pitcher']) else "N/A"
-            p_weight = f"{int(p_info['Weight_Pitcher'])} lbs" if pd.notnull(p_info['Weight_Pitcher']) else "N/A"
-            p_jersey = f"#{int(p_info['Jersey_Pitcher'])}" if pd.notnull(p_info['Jersey_Pitcher']) else ""
-            
-            # Around line 838-843 in NCAA Pitcher tab1
-            st.header(f"{selected_pitcher_fmt} {p_jersey}")  # Change from selected_pitcher to selected_pitcher_fmt
-            st.subheader(f"{selected_team_full} • {p_info['PitcherThrows']}HP")
-            st.write(f"**Physicals:** {p_height} | {p_weight}")
-            st.divider()
+            # [DELETED OLD BIO HEADER FROM HERE]
 
             # 1. Clean data for stats
             data = data[~data['TaggedPitchType'].isin(['Undefined', 'Other'])]
@@ -1272,7 +1273,7 @@ elif app == "NCAA Pitcher":
                 st.subheader(f"vs {side}-Handed Hitters")
                 split_df = data[data['BatterSide'] == side]
                 if not split_df.empty:
-                    # Assumes you have your helper functions 'pitch_type_stats' and 'overall_stats' defined elsewhere
+                    # Assumes helper functions are defined
                     stats_df = pitch_type_stats(split_df)
                     overall_row = pd.DataFrame([overall_stats(split_df)])
                     final_df = pd.concat([overall_row, stats_df], ignore_index=True)
@@ -1283,16 +1284,20 @@ elif app == "NCAA Pitcher":
                         'SLG': '{:.3f}',
                         'Zone%': '{:.1f}%',
                         'Whiff%': '{:.1f}%', 
-                        'Zone Whiff%': '{:.1f}%',  # Added this
-                        'Chase%': '{:.1f}%',       # Added this
+                        'Zone Whiff%': '{:.1f}%',
+                        'Chase%': '{:.1f}%',
                         'run_value': '{:.2f}', 
-                        'wOBA': '{:.3f}',          # Ensure these match your dict keys
+                        'wOBA': '{:.3f}', 
                         'xwOBA': '{:.3f}',
                         'HH%': '{:.1f}%', 
                         'GB%': '{:.1f}%'
                     }), use_container_width=True)
                 else:
                     st.info(f"No pitch data found against {side}-handed hitters.")
+        else:
+            st.info("Select a pitcher to view data.")
+
+    # ... The rest of Tabs 2-6 remain exactly the same ...
 
     with tab2:
         if not data.empty:
@@ -2188,24 +2193,26 @@ elif app == "Holy Cross Pitcher":
     # Step 2: Load ONLY this pitcher's data (lazy loaded!)
     data = load_player_data(selected_pitcher_raw, selected_team_full, app_type="pitcher")
 
-    # ---- Application Tabs ----
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["Performance Data", "Stuff Visuals", "Sequencing", "Usage", "Heatmaps", "Trends"])
+    # --- [NEW LOCATION] PLAYER BIO HEADER (ABOVE TABS) ---
+    if not data.empty:
+        p_info = data.iloc[0]
+        # Convert numeric bio info safely
+        p_height = p_info['Height_Pitcher'] if pd.notnull(p_info['Height_Pitcher']) else "N/A"
+        p_weight = f"{int(p_info['Weight_Pitcher'])} lbs" if pd.notnull(p_info['Weight_Pitcher']) else "N/A"
+        p_jersey = f"#{int(p_info['Jersey_Pitcher'])}" if pd.notnull(p_info['Jersey_Pitcher']) else ""
+        
+        # Display the Header
+        st.header(f"{selected_pitcher_fmt} {p_jersey}")
+        st.subheader(f"{selected_team_full} • {p_info['PitcherThrows']}HP")
+        st.write(f"**Physicals:** {p_height} | {p_weight}")
+        st.divider()
 
-    # ... all your tab code stays exactly the same, just update selected_pitcher to selected_pitcher_fmt where needed ...
+    # ---- Application Tabs (NOW BELOW THE HEADER) ----
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["Performance Data", "Stuff Visuals", "Sequencing", "Usage", "Heatmaps", "Trends"])
 
     with tab1:
         if not data.empty:
-            # --- PLAYER BIO HEADER ---
-            p_info = data.iloc[0]
-            # Convert numeric bio info safely
-            p_height = p_info['Height_Pitcher'] if pd.notnull(p_info['Height_Pitcher']) else "N/A"
-            p_weight = f"{int(p_info['Weight_Pitcher'])} lbs" if pd.notnull(p_info['Weight_Pitcher']) else "N/A"
-            p_jersey = f"#{int(p_info['Jersey_Pitcher'])}" if pd.notnull(p_info['Jersey_Pitcher']) else ""
-            
-            st.header(f"{selected_pitcher_fmt} {p_jersey}")
-            st.subheader(f"{selected_team_full} • {p_info['PitcherThrows']}HP")
-            st.write(f"**Physicals:** {p_height} | {p_weight}")
-            st.divider()
+            # [DELETED OLD BIO HEADER FROM HERE]
 
             # 1. Clean data for stats
             data = data[~data['TaggedPitchType'].isin(['Undefined', 'Other'])]
@@ -2251,7 +2258,7 @@ elif app == "Holy Cross Pitcher":
                 st.subheader(f"vs {side}-Handed Hitters")
                 split_df = data[data['BatterSide'] == side]
                 if not split_df.empty:
-                    # Assumes you have your helper functions 'pitch_type_stats' and 'overall_stats' defined elsewhere
+                    # Assumes helper functions are defined
                     stats_df = pitch_type_stats(split_df)
                     overall_row = pd.DataFrame([overall_stats(split_df)])
                     final_df = pd.concat([overall_row, stats_df], ignore_index=True)
@@ -2262,16 +2269,20 @@ elif app == "Holy Cross Pitcher":
                         'SLG': '{:.3f}',
                         'Zone%': '{:.1f}%',
                         'Whiff%': '{:.1f}%', 
-                        'Zone Whiff%': '{:.1f}%',  # Added this
-                        'Chase%': '{:.1f}%',       # Added this
+                        'Zone Whiff%': '{:.1f}%',
+                        'Chase%': '{:.1f}%',
                         'run_value': '{:.2f}', 
-                        'wOBA': '{:.3f}',          # Ensure these match your dict keys
+                        'wOBA': '{:.3f}', 
                         'xwOBA': '{:.3f}',
                         'HH%': '{:.1f}%', 
                         'GB%': '{:.1f}%'
                     }), use_container_width=True)
                 else:
                     st.info(f"No pitch data found against {side}-handed hitters.")
+        else:
+            st.info("Select a pitcher to view data.")
+
+    # ... The rest of Tabs 2-6 remain exactly the same ...
 
     with tab2:
         if not data.empty:
