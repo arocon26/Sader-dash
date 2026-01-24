@@ -1298,9 +1298,20 @@ elif app == "NCAA Pitcher":
         if not data.empty:
             # --- 1. SETUP & SAFETY ---
             pitch_palette = {
-                'Fastball': 'blue', 'Curveball': 'red', 'Cutter': 'darkorange',
-                'Changeup': 'darkviolet', 'Slider': 'forestgreen', 'Sinker': 'yellow',
-                'Knuckleball': 'black', 'Splitter': 'purple', 'Other': 'gray'
+                'Fastball': '#D22D49',  # 4-Seam Red
+                'Four-Seam': '#D22D49',
+                'Sinker': '#FE9D00',    # Statcast Orange
+                'One-Seam Fastball': '#FE9D00',
+                'Two-Seam Fastball': '#FE9D00',
+                'Cutter': '#933F2C',    # Statcast Maroon
+                'Slider': '#DDB33A',    # Statcast Yellow
+                'Sweeper': '#DDB33A',   # Statcast Gold
+                'Curveball': '#00D1ED', # Statcast Cyan
+                'Knuckle Curve': '#6236CD', # Statcast Purple
+                'Changeup': '#1DBE3A',  # Statcast Green
+                'Splitter': '#3BACAC',  # Statcast Teal
+                'Knuckleball': '#867A08',
+                'Other': '#999999'
             }
 
             # CRITICAL SAFETY STEP: Stamp every row with its original Master ID
@@ -1559,15 +1570,20 @@ elif app == "NCAA Pitcher":
         vRHH_data = data[data['BatterSide'] == 'Right']
 
         pitch_palette = {
-            'Fastball': 'dodgerblue',
-            'Curveball': 'red',
-            'Slider': 'forestgreen',
-            'Changeup': 'darkviolet',
-            'Cutter': 'orange',
-            'Sinker': 'gold',
-            'Splitter': 'purple',
-            'Knuckleball': 'black',
-            'Other': 'grey'
+            'Fastball': '#D22D49',  # 4-Seam Red
+            'Four-Seam': '#D22D49',
+            'Sinker': '#FE9D00',    # Statcast Orange
+            'One-Seam Fastball': '#FE9D00',
+            'Two-Seam Fastball': '#FE9D00',
+            'Cutter': '#933F2C',    # Statcast Maroon
+            'Slider': '#DDB33A',    # Statcast Yellow
+            'Sweeper': '#DDB33A',   # Statcast Gold
+            'Curveball': '#00D1ED', # Statcast Cyan
+            'Knuckle Curve': '#6236CD', # Statcast Purple
+            'Changeup': '#1DBE3A',  # Statcast Green
+            'Splitter': '#3BACAC',  # Statcast Teal
+            'Knuckleball': '#867A08',
+            'Other': '#999999'
         }
 
         # ---- Add legend at the top, only for used pitch types ----
