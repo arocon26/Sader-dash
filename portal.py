@@ -1038,33 +1038,40 @@ elif app == "NCAA Hitter":
                 fig_zone = go.Figure()
                 
                 quads = [[[-0.83, 2.5, 0, 3.5], 'Upper Left'], [[0, 2.5, 0.83, 3.5], 'Upper Right'],
-                            [[-0.83, 1.5, 0, 2.5], 'Lower Left'], [[0, 1.5, 0.83, 2.5], 'Lower Right']]
+                        [[-0.83, 1.5, 0, 2.5], 'Lower Left'], [[0, 1.5, 0.83, 2.5], 'Lower Right']]
 
                 for coords, name in quads:
                     z_df = df[df['Zone'] == name]
                     if not z_df.empty:
                         m = get_advanced_metrics(z_df)
-                        bg_color = "rgba(0, 128, 0, 0.4)" if m['OPS'] >= 0.800 else "rgba(255, 0, 0, 0.4)"
+                        # FIX: Darker Backgrounds (0.8 opacity) so White text pops
+                        bg_color = "rgba(0, 100, 0, 0.8)" if m['OPS'] >= 0.800 else "rgba(180, 0, 0, 0.8)"
                         
                         fig_zone.add_shape(type="rect", x0=coords[0], y0=coords[1], x1=coords[2], y1=coords[3],
-                                        line=dict(color="black", width=2), fillcolor=bg_color)
+                                        line=dict(color="white", width=2), fillcolor=bg_color)
                         
                         fig_zone.add_trace(go.Scatter(
                             x=[(coords[0]+coords[2])/2], y=[(coords[1]+coords[3])/2],
                             text=f"OPS: {m['OPS']:.3f}<br>AVG: {m['AVG']:.3f}<br>EV: {m['Avg EV']:.1f}<br>Whiff%: {m['Miss%']:.1f}%",
-                            mode="text", textfont=dict(size=11, color="black"), showlegend=False
+                            # FIX: White Text + Bold
+                            mode="text", textfont=dict(size=12, color="white", weight='bold'), showlegend=False
                         ))
                     else:
                         fig_zone.add_shape(type="rect", x0=coords[0], y0=coords[1], x1=coords[2], y1=coords[3],
-                                        line=dict(color="black", width=1), fillcolor="rgba(200, 200, 200, 0.1)")
+                                        line=dict(color="gray", width=1), fillcolor="rgba(50, 50, 50, 0.5)")
 
+                # Strike Zone Outline
                 fig_zone.add_shape(type="path", path="M -0.4 0 L 0.4 0 L 0.4 0.2 L 0 0.4 L -0.4 0.2 Z",
-                                line=dict(color="black", width=2), fillcolor="white")
+                                line=dict(color="white", width=2), fillcolor="gray")
 
                 fig_zone.update_layout(
-                    title=f"vs {hand}HP", xaxis=dict(range=[-1.5, 1.5], visible=False),
-                    yaxis=dict(range=[-0.5, 4.0], visible=False), width=350, height=450,
-                    margin=dict(l=20, r=20, t=50, b=20), plot_bgcolor='rgba(0,0,0,0)'
+                    title=dict(text=f"vs {hand}HP", x=0.5, font=dict(color="white")),
+                    xaxis=dict(range=[-1.5, 1.5], visible=False),
+                    yaxis=dict(range=[-0.5, 4.0], visible=False), 
+                    width=350, height=450,
+                    margin=dict(l=20, r=20, t=50, b=20), 
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)'
                 )
                 return fig_zone
 
@@ -2024,33 +2031,40 @@ elif app == "Holy Cross Hitter":
                     fig_zone = go.Figure()
                     
                     quads = [[[-0.83, 2.5, 0, 3.5], 'Upper Left'], [[0, 2.5, 0.83, 3.5], 'Upper Right'],
-                             [[-0.83, 1.5, 0, 2.5], 'Lower Left'], [[0, 1.5, 0.83, 2.5], 'Lower Right']]
+                            [[-0.83, 1.5, 0, 2.5], 'Lower Left'], [[0, 1.5, 0.83, 2.5], 'Lower Right']]
 
                     for coords, name in quads:
                         z_df = df[df['Zone'] == name]
                         if not z_df.empty:
                             m = get_advanced_metrics(z_df)
-                            bg_color = "rgba(0, 128, 0, 0.4)" if m['OPS'] >= 0.800 else "rgba(255, 0, 0, 0.4)"
+                            # FIX: Darker Backgrounds (0.8 opacity) so White text pops
+                            bg_color = "rgba(0, 100, 0, 0.8)" if m['OPS'] >= 0.800 else "rgba(180, 0, 0, 0.8)"
                             
                             fig_zone.add_shape(type="rect", x0=coords[0], y0=coords[1], x1=coords[2], y1=coords[3],
-                                          line=dict(color="black", width=2), fillcolor=bg_color)
+                                            line=dict(color="white", width=2), fillcolor=bg_color)
                             
                             fig_zone.add_trace(go.Scatter(
                                 x=[(coords[0]+coords[2])/2], y=[(coords[1]+coords[3])/2],
                                 text=f"OPS: {m['OPS']:.3f}<br>AVG: {m['AVG']:.3f}<br>EV: {m['Avg EV']:.1f}<br>Whiff%: {m['Miss%']:.1f}%",
-                                mode="text", textfont=dict(size=11, color="black"), showlegend=False
+                                # FIX: White Text + Bold
+                                mode="text", textfont=dict(size=12, color="white", weight='bold'), showlegend=False
                             ))
                         else:
                             fig_zone.add_shape(type="rect", x0=coords[0], y0=coords[1], x1=coords[2], y1=coords[3],
-                                          line=dict(color="black", width=1), fillcolor="rgba(200, 200, 200, 0.1)")
+                                            line=dict(color="gray", width=1), fillcolor="rgba(50, 50, 50, 0.5)")
 
+                    # Strike Zone Outline
                     fig_zone.add_shape(type="path", path="M -0.4 0 L 0.4 0 L 0.4 0.2 L 0 0.4 L -0.4 0.2 Z",
-                                  line=dict(color="black", width=2), fillcolor="white")
+                                    line=dict(color="white", width=2), fillcolor="gray")
 
                     fig_zone.update_layout(
-                        title=f"vs {hand}HP", xaxis=dict(range=[-1.5, 1.5], visible=False),
-                        yaxis=dict(range=[-0.5, 4.0], visible=False), width=350, height=450,
-                        margin=dict(l=20, r=20, t=50, b=20), plot_bgcolor='rgba(0,0,0,0)'
+                        title=dict(text=f"vs {hand}HP", x=0.5, font=dict(color="white")),
+                        xaxis=dict(range=[-1.5, 1.5], visible=False),
+                        yaxis=dict(range=[-0.5, 4.0], visible=False), 
+                        width=350, height=450,
+                        margin=dict(l=20, r=20, t=50, b=20), 
+                        plot_bgcolor='rgba(0,0,0,0)',
+                        paper_bgcolor='rgba(0,0,0,0)'
                     )
                     return fig_zone
 
