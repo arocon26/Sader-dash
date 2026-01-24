@@ -142,7 +142,7 @@ ESSENTIAL_COLS = [
 ]
 
 # The file is now local (matches your Hugging Face file exactly)
-FILE_PATH = "ncaa_data_2025.parquet"
+FILE_PATH = "https://huggingface.co/datasets/arocon26/Sader-Data/resolve/main/ncaa_data_2025.parquet"
 
 @st.cache_data(ttl=3600, max_entries=5, show_spinner=False)
 def load_team_names(app_type="hitter"):
