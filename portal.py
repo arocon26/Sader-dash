@@ -4,13 +4,12 @@ import numpy as np
 import os
 import plotly.graph_objects as go
 import plotly.express as px
-import matplotlib.pyplot as plt
-import seaborn as sns
+from huggingface_hub import hf_hub_download
 
 # --- 1. PAGE CONFIGURATION ---
 st.set_page_config(layout="wide", page_title="Sader Dash")
 
-# Ensure we are in the correct directory
+# Ensure we are in the correct directory (for finding the logo)
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 # --- 2. LOGIN SCREEN CONFIGURATION (FORCE WIDTH) ---
@@ -22,20 +21,17 @@ login_style = """
     }
 
     /* 2. THE CARD - CENTERED WITH PURE CSS */
-    /* We select the form and force it to be 50% of the screen width, centered */
     [data-testid="stForm"] {
         background-color: #450084; /* Holy Cross Purple */
         padding: 50px;
         border-radius: 20px;
         box-shadow: 0px 10px 40px rgba(0,0,0,0.4);
         text-align: center;
-        
-        /* THE CRITICAL FIX: */
         width: 600px !important;    /* Force a fixed width */
         max-width: 90%;             /* Safety for mobile phones */
         margin: 0 auto;             /* Center horizontally */
         display: block;
-        margin-top: 100px;          /* Push it down from the top */
+        margin-top: 100px;
     }
 
     /* 3. INPUT BOX - BIGGER */
@@ -76,19 +72,14 @@ login_style = """
 
 def check_password():
     """Returns True if the user enters the correct password."""
-    
     if st.session_state.get('password_correct', False):
         return True
     
     # Inject the CSS
     st.markdown(login_style, unsafe_allow_html=True)
     
-    # --- NO COLUMNS NEEDED ---
-    # We just drop the form right on the page, and CSS handles the centering.
-    
     with st.form("login_form"):
         # LOGO SECTION
-        # We use a simple 3-column split INSIDE the card just to center the image itself
         left, mid, right = st.columns([1, 2, 1])
         with mid:
             if os.path.exists("hc_logo.svg"):
@@ -117,10 +108,19 @@ def check_password():
 if not check_password():
     st.stop()
 
-# --- 4. DATA LOADING (Paste your ESSENTIAL_COLS and loading functions below here) ---
+# --- 4. DATA CONFIGURATION & CONSTANTS ---
 
+# NCAA D1 BASELINES (2025 APPROX) - For Context
+NCAA_BASELINES = {
+    'Fastball': {'Velo': 90.5, 'Spin': 2250, 'IVB': 16.0, 'HB': 8.0, 'Whiff': 18.0},
+    'Sinker':   {'Velo': 89.5, 'Spin': 2100, 'IVB': 8.0,  'HB': 15.0, 'Whiff': 14.0},
+    'Cutter':   {'Velo': 86.0, 'Spin': 2300, 'IVB': 6.0,  'HB': 2.0,  'Whiff': 26.0},
+    'Slider':   {'Velo': 82.0, 'Spin': 2400, 'IVB': 2.0,  'HB': -12.0,'Whiff': 34.0},
+    'Sweeper':  {'Velo': 79.0, 'Spin': 2500, 'IVB': 1.0,  'HB': -16.0,'Whiff': 38.0},
+    'Curveball':{'Velo': 76.0, 'Spin': 2500, 'IVB': -8.0, 'HB': -10.0,'Whiff': 32.0},
+    'Changeup': {'Velo': 81.0, 'Spin': 1600, 'IVB': 6.0,  'HB': 14.0, 'Whiff': 30.0},
+}
 
-# --- 4. DATA LOADING CONFIGURATION ---
 ESSENTIAL_COLS = [
     # Identifiers
     'Pitcher', 'Batter', 'PitcherTeam', 'newestTeamName_Pitcher', 'newestTeamName_Batter', 'Date',
@@ -136,44 +136,46 @@ ESSENTIAL_COLS = [
     'ExitSpeed', 'Angle', 'Distance', 'Direction',
     # Advanced Metrics
     'run_value', 'wOBA_result', 'xwOBA_result',
-    # Bio Data (Pitcher & Batter)
+    # Bio Data
     'Height_Pitcher', 'Weight_Pitcher', 'Jersey_Pitcher',
     'Height_Batter', 'Weight_Batter', 'Jersey_Batter'
 ]
 
-# The file is now local (matches your Hugging Face file exactly)
-FILE_PATH = "https://huggingface.co/datasets/arocon26/Sader-Data/resolve/main/ncaa_data_2025.parquet"
+# --- 5. OPTIMIZED DATA LOADING FUNCTIONS ---
+
+@st.cache_resource(show_spinner=False)
+def get_local_data_path():
+    """Cached helper to download/retrieve the parquet file path from Hugging Face Datasets"""
+    # This checks for updates automatically. If the file is unchanged, it uses the cached version.
+    return hf_hub_download(
+        repo_id="arocon26/Sader-Data", 
+        repo_type="dataset", 
+        filename="ncaa_data_2025.parquet"
+    )
 
 @st.cache_data(ttl=3600, max_entries=5, show_spinner=False)
 def load_team_names(app_type="hitter"):
-    """Load ONLY team names for selection"""
+    """Load ONLY team names"""
+    path = get_local_data_path()
+    
     if app_type == "hitter":
         col = "newestTeamName_Batter"
     else:
         col = "newestTeamName_Pitcher"
     
-    df = pd.read_parquet(FILE_PATH, columns=[col])
-    teams = sorted(df[col].dropna().unique())
-    return teams
+    try:
+        df = pd.read_parquet(path, columns=[col])
+        teams = sorted(df[col].dropna().unique())
+        return teams
+    except Exception as e:
+        st.error(f"Error loading teams: {e}")
+        return []
 
 @st.cache_data(ttl=3600, max_entries=5, show_spinner=False)
 def load_players_for_team(team_name, app_type="hitter"):
     """Load ONLY player names for selected team"""
-    if app_type == "hitter":
-        team_col = "newestTeamName_Batter"
-        player_col = "Batter"
-    else:
-        team_col = "newestTeamName_Pitcher"
-        player_col = "Pitcher"
+    path = get_local_data_path()
     
-    df = pd.read_parquet(FILE_PATH, columns=[team_col, player_col])
-    df = df[df[team_col] == team_name]
-    players = sorted(df[player_col].dropna().unique())
-    return players
-
-@st.cache_data(ttl=3600, max_entries=5, show_spinner=False)
-def load_player_data(player_name, team_name, app_type="hitter"):
-    """Load ONLY data for selected player - PRESERVING MASTER INDEX"""
     if app_type == "hitter":
         team_col = "newestTeamName_Batter"
         player_col = "Batter"
@@ -182,18 +184,35 @@ def load_player_data(player_name, team_name, app_type="hitter"):
         player_col = "Pitcher"
     
     try:
-        # 1. LOAD FULL DATA (Essential Columns Only)
-        # We do NOT use 'filters=' here because that resets the index.
-        # By loading fully, we get the true Row # from the master file.
+        df = pd.read_parquet(path, columns=[team_col, player_col])
+        df = df[df[team_col] == team_name]
+        players = sorted(df[player_col].dropna().unique())
+        return players
+    except Exception as e:
+        return []
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def load_player_data(player_name, team_name, app_type="hitter"):
+    """Load ONLY data for selected player - Optimized with Smart Caching"""
+    if app_type == "hitter":
+        team_col = "newestTeamName_Batter"
+        player_col = "Batter"
+    else:
+        team_col = "newestTeamName_Pitcher"
+        player_col = "Pitcher"
+    
+    try:
+        # 1. Get the fast local path (shared function)
+        local_path = get_local_data_path()
+
+        # 2. Read from Local Disk (Fast!)
         df = pd.read_parquet(
-            FILE_PATH, 
-            columns=ESSENTIAL_COLS,
+            local_path, 
+            columns=ESSENTIAL_COLS, 
             engine='pyarrow'
         )
 
-        # 2. FILTER IN MEMORY
-        # Pandas filtering preserves the original index. 
-        # e.g., if the player is on Row 5000, the index stays 5000.
+        # 3. Filter in Memory
         df = df[(df[team_col] == team_name) & (df[player_col] == player_name)]
         
     except Exception as e:
