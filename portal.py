@@ -1345,205 +1345,275 @@ elif app == "NCAA Pitcher":
     # ... The rest of Tabs 2-6 remain exactly the same ...
 
     with tab2:
-        if not data.empty:
-            # --- 1. SETUP & SAFETY ---
-            pitch_palette = {
-                'Fastball': '#D22D49',  # 4-Seam Red
-                'Four-Seam': '#D22D49',
-                'Sinker': '#FE9D00',    # Statcast Orange
-                'One-Seam Fastball': '#FE9D00',
-                'Two-Seam Fastball': '#FE9D00',
-                'Cutter': '#933F2C',    # Statcast Maroon
-                'Slider': '#DDB33A',    # Statcast Yellow
-                'Sweeper': '#DDB33A',   # Statcast Gold
-                'Curveball': '#00D1ED', # Statcast Cyan
-                'Knuckle Curve': '#6236CD', # Statcast Purple
-                'Changeup': '#1DBE3A',  # Statcast Green
-                'Splitter': '#3BACAC',  # Statcast Teal
-                'Knuckleball': '#867A08',
-                'Other': '#999999'
-            }
+        # --- 1. FILTERS (PITCHER SIDE) ---
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            # Load Teams (Cached)
+            pitcher_teams = load_team_names("pitcher")
+            p_team = st.selectbox("Pitcher Team", pitcher_teams, key="p_team_select")
+        
+        with col2:
+            # Load Players (Cached)
+            pitchers = load_players_for_team(p_team, "pitcher")
+            pitcher = st.selectbox("Select Pitcher", pitchers, key="pitcher_select")
+        
+        with col3:
+            # Date Filter (Default to Full Season)
+            date_range = st.date_input("Date Range", [pd.to_datetime("2025-01-01"), pd.to_datetime("2025-12-31")], key="p_date")
 
-            # CRITICAL SAFETY STEP: Stamp every row with its original Master ID
-            # We explicitly create a column called 'master_index' to track the true row number
-            plot_df = data.copy()
-            plot_df['master_index'] = plot_df.index 
-
-            # Now we can filter safely without losing the ID
-            for c in ['HorzBreak', 'InducedVertBreak', 'RelSpeed', 'SpinRate', 'RelSide', 'RelHeight']:
-                plot_df[c] = pd.to_numeric(plot_df[c], errors='coerce')
+        # --- 2. DATA LOADING ---
+        if pitcher:
+            # Load Data (Optimized)
+            p_data = load_player_data(pitcher, p_team, "pitcher")
             
-            # Drop invalid rows but keep the master_index attached
-            plot_df = plot_df.dropna(subset=['RelSpeed', 'SpinRate', 'HorzBreak', 'InducedVertBreak'])
+            # Filter by Date
+            if not p_data.empty:
+                p_data['Date'] = pd.to_datetime(p_data['Date'])
+                if len(date_range) == 2:
+                    p_data = p_data[(p_data['Date'] >= pd.to_datetime(date_range[0])) & 
+                                    (p_data['Date'] <= pd.to_datetime(date_range[1]))]
 
-            # --- HELPER: SAFE FIXING WIDGET ---
-            # --- HELPER: SAFE FIXING WIDGET (PATCHED) ---
-            # --- HELPER: DEBUG FIXING WIDGET ---
-            # --- HELPER: DEBUG FIXING WIDGET ---
-            def show_admin_fix_widget(selected_data, chart_name):
-                if not st.session_state.get("is_admin", False):
-                    return
+                # --- 3. HELPER: SAFE FIXING WIDGET ---
+                def show_admin_fix_widget(selected_data, chart_name):
+                    if not st.session_state.get("is_admin", False):
+                        return
 
-                if selected_data and "selection" in selected_data:
-                    pts = selected_data["selection"]["points"]
-                    if not pts: return
+                    if selected_data and "selection" in selected_data:
+                        pts = selected_data["selection"]["points"]
+                        if not pts: return
 
-                    # Extract the SAFE 'master_index'
-                    safe_indices = []
-                    for p in pts:
-                        try:
-                            cd = p.get("customdata")
-                            if isinstance(cd, list): val = cd[0]
-                            elif isinstance(cd, dict): val = cd.get("0") or list(cd.values())[0]
-                            else: val = cd
-                            safe_indices.append(val)
-                        except: pass
-                    
-                    safe_indices = [int(i) for i in safe_indices if i is not None]
-                    
-                    if safe_indices:
-                        st.info(f"🔍 Debug: You selected {len(safe_indices)} pitches. IDs: {safe_indices[:5]}...")
+                        # Extract the SAFE 'master_index'
+                        safe_indices = []
+                        for p in pts:
+                            try:
+                                # Try to get customdata (which holds the original Index)
+                                cd = p.get("customdata")
+                                if isinstance(cd, list): val = cd[0]
+                                elif isinstance(cd, dict): val = cd.get("0") or list(cd.values())[0]
+                                else: val = cd
+                                safe_indices.append(val)
+                            except: pass
                         
-                        col1, col2 = st.columns([2, 1])
-                        with col1:
-                            new_tag = st.selectbox(
-                                f"Change to:", 
-                                ["Fastball", "Slider", "Curveball", "Changeup", "Sinker", "Cutter", "Splitter"],
-                                key=f"fix_{chart_name}"
-                            )
-                        with col2:
-                            st.write("") 
-                            if st.button(f"✅ Apply Fix", key=f"btn_{chart_name}"):
-                                try:
-                                    # 1. Load Master File
-                                    full_df = pd.read_parquet("ncaa_data_2025.parquet")
-                                    
-                                    # 2. DEBUG: Check if indices exist
-                                    valid_indices = [i for i in safe_indices if i in full_df.index]
-                                    
-                                    if len(valid_indices) == 0:
-                                        st.error(f"❌ Critical Error: None of the selected IDs ({safe_indices[:3]}...) exist in the master file! The file index might have reset.")
-                                        return
-                                    
-                                    # 3. Update
-                                    full_df.loc[valid_indices, 'TaggedPitchType'] = new_tag
-                                    
-                                    # 4. Save
-                                    full_df.to_parquet("ncaa_data_2025.parquet", index=False)
-                                    
-                                    # 5. FORCE CLEAR EVERYTHING
-                                    st.cache_data.clear()
-                                    if 'data' in st.session_state: del st.session_state['data']
-                                    
-                                    st.success(f"✅ Fixed {len(valid_indices)} pitches! Reloading...")
-                                    st.rerun()
-                                    
-                                except Exception as e:
-                                    st.error(f"❌ Save failed: {e}")
+                        safe_indices = [int(i) for i in safe_indices if i is not None]
+                        
+                        if safe_indices:
+                            st.info(f"🔍 Debug: You selected {len(safe_indices)} pitches. IDs: {safe_indices[:5]}...")
+                            
+                            col1, col2 = st.columns([2, 1])
+                            with col1:
+                                new_tag = st.selectbox(
+                                    f"Change to:", 
+                                    ["Fastball", "Sinker", "Cutter", "Slider", "Sweeper", "Curveball", "Knuckle Curve", "Changeup", "Splitter"],
+                                    key=f"fix_{chart_name}"
+                                )
+                            with col2:
+                                st.write("") 
+                                if st.button(f"✅ Apply Fix", key=f"btn_{chart_name}"):
+                                    try:
+                                        # 1. LOAD MASTER FILE FROM CACHE (Using your helper)
+                                        path = get_local_data_path()
+                                        full_df = pd.read_parquet(path)
+                                        
+                                        # 2. VALIDATE INDICES
+                                        valid_indices = [i for i in safe_indices if i in full_df.index]
+                                        
+                                        if len(valid_indices) == 0:
+                                            st.error("❌ Critical Error: Indices not found. The dataset might have changed.")
+                                            return
+                                        
+                                        # 3. UPDATE THE DATA
+                                        full_df.loc[valid_indices, 'TaggedPitchType'] = new_tag
+                                        
+                                        # 4. SAVE A TEMPORARY COPY LOCALLY
+                                        full_df.to_parquet("ncaa_data_2025_fixed.parquet", index=False)
+                                        
+                                        # 5. CLEAR CACHE & RELOAD
+                                        st.cache_data.clear()
+                                        st.success(f"✅ Fixed {len(valid_indices)} pitches! Please download the file below.")
+                                        
+                                    except Exception as e:
+                                        st.error(f"❌ Save failed: {e}")
 
-            # --- SECTION A: VELOCITY vs SPIN ---
-            st.subheader("Velocity vs. Spin Rate")
-            st.caption("Admin Tip: Lasso Select incorrect pitches to fix them.")
-            
-            fig_ss = px.scatter(
-                plot_df, x='RelSpeed', y='SpinRate', color='TaggedPitchType',
-                color_discrete_map=pitch_palette,
-                labels={'RelSpeed': 'Velocity (MPH)', 'SpinRate': 'Spin Rate (RPM)'},
-                # KEY SAFETY: Pass 'master_index' so we know the true ID
-                custom_data=['master_index'] 
-            )
-            
-            fig_ss.update_layout(dragmode='lasso', clickmode='event+select', height=500, plot_bgcolor='white')
-            fig_ss.update_traces(marker=dict(size=8, line=dict(width=1, color='white')))
+                # --- 4. SUMMARY METRICS ---
+                st.markdown(f"### 📊 Pitching Summary: {pitcher}")
+                
+                # Calculate Averages Grouped by Pitch Type
+                summary = p_data.groupby('TaggedPitchType').agg(
+                    Count=('RelSpeed', 'count'),
+                    Avg_Velo=('RelSpeed', 'mean'),
+                    Max_Velo=('RelSpeed', 'max'),
+                    Spin=('SpinRate', 'mean'),
+                    IVB=('InducedVertBreak', 'mean'),
+                    HB=('HorzBreak', 'mean'),
+                    Whiff_Pct=('PitchCall', lambda x: (x == 'StrikeSwinging').sum() / (x.isin(['StrikeSwinging', 'InPlay', 'Foul'])).sum() * 100)
+                ).reset_index().round(1)
+                
+                # Display as a dataframe (Clean Table)
+                st.dataframe(summary, use_container_width=True, hide_index=True)
 
-            selection_ss = st.plotly_chart(fig_ss, on_select="rerun", use_container_width=True)
-            show_admin_fix_widget(selection_ss, "VeloSpin")
-
-            st.divider()
-
-            # --- SECTION B: MOVEMENT PROFILE ---
-            st.subheader("Interactive Movement Profile (IVB vs HB)")
-            
-            fig_mov = px.scatter(
-                plot_df, x='HorzBreak', y='InducedVertBreak', color='TaggedPitchType',
-                color_discrete_map=pitch_palette,
-                labels={'HorzBreak': 'Horizontal Break', 'InducedVertBreak': 'Induced Vert Break'},
-                # KEY SAFETY: Pass 'master_index' here too
-                custom_data=['master_index'] 
-            )
-            fig_mov.add_hline(y=0, line_dash="dash", line_color="black")
-            fig_mov.add_vline(x=0, line_dash="dash", line_color="black")
-            fig_mov.update_layout(dragmode='lasso', clickmode='event+select', height=600, plot_bgcolor='white')
-            fig_mov.update_traces(marker=dict(size=8, line=dict(width=1, color='white')))
-            fig_mov.update_xaxes(range=[-30, 30])
-            fig_mov.update_yaxes(range=[-30, 30])
-
-            selection_mov = st.plotly_chart(fig_mov, on_select="rerun", use_container_width=True)
-            show_admin_fix_widget(selection_mov, "Movement")
-            
-            # --- DOWNLOAD BUTTON (Only for Admin) ---
-            if st.session_state.get("is_admin", False):
                 st.divider()
-                st.markdown("### 💾 Save Your Work")
-                st.caption("Changes are temporary until you download this file and upload it to Hugging Face.")
-                with open("ncaa_data_2025.parquet", "rb") as f:
-                    st.download_button(
-                        label="⬇️ Download Fixed Data",
-                        data=f,
-                        file_name="ncaa_data_2025_fixed.parquet",
-                        mime="application/octet-stream"
-                    )
 
-            st.divider()
-
-            # --- SECTION C: BIOMETRIC ARM ANGLE (Preserved from your code) ---
-            st.subheader("🧬 Biometric Release Profile")
-            
-            arm_data = plot_df.dropna(subset=['RelSide', 'RelHeight'])
-            p_height_str = data['Height_Pitcher'].iloc[0] if not data.empty else "6' 0\""
-            try:
-                h_parts = p_height_str.replace('"', '').split("' ")
-                p_height_ft = float(h_parts[0]) + (float(h_parts[1]) / 12)
-            except:
-                p_height_ft = 6.0 
-
-            shoulder_height = p_height_ft * 0.80  
-            head_size = p_height_ft * 0.10
-
-            c1, c2 = st.columns([1, 2])
-            with c1:
-                avg_rel = arm_data.groupby('TaggedPitchType')[['RelSide', 'RelHeight']].mean().reset_index()
-                fig_st, ax_st = plt.subplots(figsize=(2.5, 4))
-                ax_st.plot([0, 0], [0, shoulder_height], color='black', linewidth=3)
-                ax_st.plot([-0.4, 0.4], [shoulder_height, shoulder_height], color='black', linewidth=3)
-                ax_st.add_patch(plt.Circle((0, shoulder_height + head_size/2), head_size/2, color='black', fill=False))
+                # --- 5. MOVEMENT PLOT (WITH LASSO) ---
+                st.markdown("### 🎯 Pitch Movement (Lasso to Fix)")
                 
-                legend_info = []
-                for _, row in avg_rel.iterrows():
-                    clr = pitch_palette.get(row['TaggedPitchType'], 'grey')
-                    sh_x = 0.4 if row['RelSide'] > 0 else -0.4
-                    ax_st.plot([sh_x, row['RelSide']], [shoulder_height, row['RelHeight']], color=clr, linewidth=2, marker='o', markersize=4)
+                # Create Scatter Plot
+                fig_mov = px.scatter(
+                    p_data, x="HorzBreak", y="InducedVertBreak", 
+                    color="TaggedPitchType",
+                    hover_data=["RelSpeed", "SpinRate", "Date"],
+                    title=f"{pitcher} - Movement Profile",
+                    width=800, height=600
+                )
+                
+                # Formatting
+                fig_mov.add_shape(type="line", x0=-25, y0=0, x1=25, y1=0, line=dict(color="gray", width=1, dash="dash"))
+                fig_mov.add_shape(type="line", x0=0, y0=-25, x1=0, y1=25, line=dict(color="gray", width=1, dash="dash"))
+                fig_mov.update_layout(
+                    xaxis_title="Horizontal Break (in)", 
+                    yaxis_title="Induced Vertical Break (in)",
+                    xaxis=dict(range=[-25, 25]), 
+                    yaxis=dict(range=[-25, 25]),
+                    dragmode='lasso'  # Enable Lasso Tool by default
+                )
+                
+                # ADD INDEX TO CUSTOM DATA (Crucial for the Fixer to work)
+                fig_mov.update_traces(customdata=p_data.index)
+
+                # RENDER CHART with Selection Enabled
+                selection_mov = st.plotly_chart(
+                    fig_mov, 
+                    on_select="rerun", 
+                    selection_mode=["box", "lasso"],
+                    use_container_width=True,
+                    key="mov_scatter"
+                )
+
+                # CALL THE FIXER WIDGET
+                show_admin_fix_widget(selection_mov, "movement_chart")
+                
+                st.divider()
+
+                # --- 6. VELOCITY & SPIN DISTRIBUTIONS ---
+                col_a, col_b = st.columns(2)
+                with col_a:
+                    st.subheader("🚀 Velocity Distribution")
+                    fig_velo = px.histogram(p_data, x="RelSpeed", color="TaggedPitchType", nbins=20, barmode="overlay")
+                    st.plotly_chart(fig_velo, use_container_width=True)
+                
+                with col_b:
+                    st.subheader("🔄 Spin Rate Distribution")
+                    fig_spin = px.histogram(p_data, x="SpinRate", color="TaggedPitchType", nbins=20, barmode="overlay")
+                    st.plotly_chart(fig_spin, use_container_width=True)
+
+                st.divider()
+
+                # --- 7. PERFORMANCE BY ZONE (DARK MODE FIXED) ---
+                st.subheader("📍 Performance by Zone")
+                
+                # Helper to calculate stats per zone
+                def get_advanced_metrics(subset):
+                    if subset.empty: return {'OPS': 0, 'AVG': 0, 'Avg EV': 0}
+                    # Simple approximation for OPS/AVG if exact columns aren't there
+                    # You can expand this logic based on your 'PlayResult' column
+                    hits = subset[subset['PlayResult'].isin(['Single', 'Double', 'Triple', 'HomeRun'])].shape[0]
+                    ab = subset[subset['PlayResult'] != 'Undefined'].shape[0] # Simplified AB
+                    avg = hits / ab if ab > 0 else 0
+                    ops = avg * 1.7 # Rough proxy if real OPS isn't calculated
+                    ev = subset['ExitSpeed'].mean() if 'ExitSpeed' in subset.columns else 0
+                    return {'OPS': ops, 'AVG': avg, 'Avg EV': ev}
+
+                def draw_performance_grid(data, hand):
+                    hand_col = 'PitcherThrows' if 'PitcherThrows' in data.columns else 'PitcherHand'
                     
-                    ang = np.degrees(np.arctan2(row['RelHeight'] - shoulder_height, abs(row['RelSide'] - sh_x)))
-                    legend_info.append((row['TaggedPitchType'], clr, ang))
+                    # Filter for Hand
+                    df = data[data[hand_col] == hand].copy() if hand_col in data.columns else data.copy()
+                    
+                    # Convert coords
+                    df['PlateLocSide'] = pd.to_numeric(df['PlateLocSide'], errors='coerce')
+                    df['PlateLocHeight'] = pd.to_numeric(df['PlateLocHeight'], errors='coerce')
+                    
+                    # Define Zones
+                    df['Zone'] = 'Outside'
+                    df.loc[(df['PlateLocSide'] < 0) & (df['PlateLocHeight'] > 2.5), 'Zone'] = 'Upper Left'
+                    df.loc[(df['PlateLocSide'] >= 0) & (df['PlateLocHeight'] > 2.5), 'Zone'] = 'Upper Right'
+                    df.loc[(df['PlateLocSide'] < 0) & (df['PlateLocHeight'] <= 2.5), 'Zone'] = 'Lower Left'
+                    df.loc[(df['PlateLocSide'] >= 0) & (df['PlateLocHeight'] <= 2.5), 'Zone'] = 'Lower Right'
 
-                ax_st.set_xlim(-4, 4); ax_st.set_ylim(0, p_height_ft + 1)
-                ax_st.axhline(0, color='gray', linestyle='--', linewidth=1)
-                ax_st.axis('off')
-                st.pyplot(fig_st)
-                
-                for name, clr, ang in legend_info:
-                    st.markdown(f"<span style='color:{clr}'>●</span> **{name}**: {ang:.1f}°", unsafe_allow_html=True)
+                    fig_zone = go.Figure()
+                    
+                    # Coordinates for the 4 zones [x0, y0, x1, y1]
+                    quads = [[[-0.83, 2.5, 0, 3.5], 'Upper Left'], [[0, 2.5, 0.83, 3.5], 'Upper Right'],
+                            [[-0.83, 1.5, 0, 2.5], 'Lower Left'], [[0, 1.5, 0.83, 2.5], 'Lower Right']]
 
-            with c2:
-                fig_cn, ax_cn = plt.subplots(figsize=(6, 5))
-                sns.scatterplot(data=arm_data, x='RelSide', y='RelHeight', hue='TaggedPitchType', palette=pitch_palette, s=40, alpha=0.5, ax=ax_cn)
-                ax_cn.set_title("Release Point Consistency")
-                st.pyplot(fig_cn)
-                plt.close('all') # Cleanup all matplotlib figures
+                    for coords, name in quads:
+                        z_df = df[df['Zone'] == name]
+                        if not z_df.empty:
+                            m = get_advanced_metrics(z_df)
+                            
+                            # COLOR LOGIC: Darker colors for contrast
+                            bg_color = "rgba(34, 139, 34, 0.9)" if m['OPS'] >= 0.800 else "rgba(178, 34, 34, 0.9)"
+                            
+                            # Box
+                            fig_zone.add_shape(type="rect", 
+                                x0=coords[0], y0=coords[1], x1=coords[2], y1=coords[3],
+                                line=dict(color="white", width=1), 
+                                fillcolor=bg_color, layer="below" 
+                            )
+                            # Text (White & Bold)
+                            fig_zone.add_trace(go.Scatter(
+                                x=[(coords[0]+coords[2])/2], y=[(coords[1]+coords[3])/2],
+                                text=f"OPS: {m['OPS']:.3f}<br>AVG: {m['AVG']:.3f}<br>EV: {m['Avg EV']:.1f}",
+                                mode="text", 
+                                textfont=dict(size=14, color="white", weight="bold"),
+                                showlegend=False
+                            ))
+                        else:
+                            # Empty Zone
+                            fig_zone.add_shape(type="rect", 
+                                x0=coords[0], y0=coords[1], x1=coords[2], y1=coords[3],
+                                line=dict(color="gray", width=1), 
+                                fillcolor="rgba(100, 100, 100, 0.3)", layer="below"
+                            )
 
-        else:
-            st.info("No pitch data available.")
+                    # Home Plate
+                    fig_zone.add_shape(type="path", path="M -0.4 0 L 0.4 0 L 0.4 0.2 L 0 0.4 L -0.4 0.2 Z",
+                                line=dict(color="white", width=2), fillcolor="gray", layer="below")
+
+                    fig_zone.update_layout(
+                        title=dict(text=f"vs {hand}HP", x=0.5, font=dict(size=16, color="white")),
+                        xaxis=dict(range=[-1.5, 1.5], visible=False),
+                        yaxis=dict(range=[-0.5, 4.0], visible=False), 
+                        width=350, height=450,
+                        margin=dict(l=10, r=10, t=40, b=10), 
+                        plot_bgcolor='rgba(0,0,0,0)', 
+                        paper_bgcolor='rgba(0,0,0,0)'
+                    )
+                    return fig_zone
+
+                # Render Zone Grids
+                z_col1, z_col2 = st.columns(2)
+                with z_col1:
+                    st.plotly_chart(draw_performance_grid(p_data, 'Left'), use_container_width=True)
+                with z_col2:
+                    st.plotly_chart(draw_performance_grid(p_data, 'Right'), use_container_width=True)
+
+                # --- 8. DOWNLOAD BUTTON (FOR ADMINS) ---
+                if st.session_state.get("is_admin", False):
+                    st.divider()
+                    st.markdown("### 💾 Save Your Work")
+                    st.caption("1. Click Download below. 2. Upload the file to your 'Sader-Data' Dataset repository.")
+                    
+                    if os.path.exists("ncaa_data_2025_fixed.parquet"):
+                        with open("ncaa_data_2025_fixed.parquet", "rb") as f:
+                            st.download_button(
+                                label="⬇️ Download Fixed Data",
+                                data=f,
+                                file_name="ncaa_data_2025.parquet",
+                                mime="application/octet-stream"
+                            )
+                    else:
+                        st.info("Make a change above to generate a downloadable file.")
+
 
 
     with tab3:
@@ -2354,194 +2424,230 @@ elif app == "Holy Cross Pitcher":
     # ... The rest of Tabs 2-6 remain exactly the same ...
 
     with tab2:
-        if not data.empty:
-            # --- 1. SETUP & SAFETY ---
-            pitch_palette = {
-                'Fastball': 'blue', 'Curveball': 'red', 'Cutter': 'darkorange',
-                'Changeup': 'darkviolet', 'Slider': 'forestgreen', 'Sinker': 'yellow',
-                'Knuckleball': 'black', 'Splitter': 'purple', 'Other': 'gray'
-            }
+        # --- 1. FILTERS (HC SPECIFIC) ---
+        col1, col2 = st.columns([1, 2])
+        with col1:
+            # HARDCODED TEAM for this section
+            p_team = "College of the Holy Cross"
+            st.info(f"Team: {p_team}")
+        
+        with col2:
+            # Date Filter
+            date_range = st.date_input("Date Range", [pd.to_datetime("2025-01-01"), pd.to_datetime("2025-12-31")], key="hc_p_date")
 
-            # CRITICAL SAFETY STEP: Stamp every row with its original Master ID
-            # We explicitly create a column called 'master_index' to track the true row number
-            plot_df = data.copy()
-            plot_df['master_index'] = plot_df.index 
+        # Select Pitcher (Loader uses the hardcoded team)
+        pitchers = load_players_for_team(p_team, "pitcher")
+        pitcher = st.selectbox("Select Holy Cross Pitcher", pitchers, key="hc_pitcher_select")
 
-            # Now we can filter safely without losing the ID
-            for c in ['HorzBreak', 'InducedVertBreak', 'RelSpeed', 'SpinRate', 'RelSide', 'RelHeight']:
-                plot_df[c] = pd.to_numeric(plot_df[c], errors='coerce')
+        # --- 2. DATA LOADING ---
+        if pitcher:
+            # Load Data (Optimized)
+            p_data = load_player_data(pitcher, p_team, "pitcher")
             
-            # Drop invalid rows but keep the master_index attached
-            plot_df = plot_df.dropna(subset=['RelSpeed', 'SpinRate', 'HorzBreak', 'InducedVertBreak'])
+            # Filter by Date
+            if not p_data.empty:
+                p_data['Date'] = pd.to_datetime(p_data['Date'])
+                if len(date_range) == 2:
+                    p_data = p_data[(p_data['Date'] >= pd.to_datetime(date_range[0])) & 
+                                    (p_data['Date'] <= pd.to_datetime(date_range[1]))]
 
-            # --- HELPER: SAFE FIXING WIDGET ---
-            # --- HELPER: SAFE FIXING WIDGET (PATCHED) ---
-            # --- HELPER: DEBUG FIXING WIDGET ---
-            # --- HELPER: DEBUG FIXING WIDGET ---
-            def show_admin_fix_widget(selected_data, chart_name):
-                if not st.session_state.get("is_admin", False):
-                    return
+                # --- 3. HELPER: SAFE FIXING WIDGET ---
+                def show_admin_fix_widget(selected_data, chart_name):
+                    if not st.session_state.get("is_admin", False):
+                        return
 
-                if selected_data and "selection" in selected_data:
-                    pts = selected_data["selection"]["points"]
-                    if not pts: return
+                    if selected_data and "selection" in selected_data:
+                        pts = selected_data["selection"]["points"]
+                        if not pts: return
 
-                    # Extract the SAFE 'master_index'
-                    safe_indices = []
-                    for p in pts:
-                        try:
-                            cd = p.get("customdata")
-                            if isinstance(cd, list): val = cd[0]
-                            elif isinstance(cd, dict): val = cd.get("0") or list(cd.values())[0]
-                            else: val = cd
-                            safe_indices.append(val)
-                        except: pass
-                    
-                    safe_indices = [int(i) for i in safe_indices if i is not None]
-                    
-                    if safe_indices:
-                        st.info(f"🔍 Debug: You selected {len(safe_indices)} pitches. IDs: {safe_indices[:5]}...")
+                        # Extract the SAFE 'master_index'
+                        safe_indices = []
+                        for p in pts:
+                            try:
+                                cd = p.get("customdata")
+                                if isinstance(cd, list): val = cd[0]
+                                elif isinstance(cd, dict): val = cd.get("0") or list(cd.values())[0]
+                                else: val = cd
+                                safe_indices.append(val)
+                            except: pass
                         
-                        col1, col2 = st.columns([2, 1])
-                        with col1:
-                            new_tag = st.selectbox(
-                                f"Change to:", 
-                                ["Fastball", "Slider", "Curveball", "Changeup", "Sinker", "Cutter", "Splitter"],
-                                key=f"fix_{chart_name}"
-                            )
-                        with col2:
-                            st.write("") 
-                            if st.button(f"✅ Apply Fix", key=f"btn_{chart_name}"):
-                                try:
-                                    # 1. Load Master File
-                                    full_df = pd.read_parquet("ncaa_data_2025.parquet")
-                                    
-                                    # 2. DEBUG: Check if indices exist
-                                    valid_indices = [i for i in safe_indices if i in full_df.index]
-                                    
-                                    if len(valid_indices) == 0:
-                                        st.error(f"❌ Critical Error: None of the selected IDs ({safe_indices[:3]}...) exist in the master file! The file index might have reset.")
-                                        return
-                                    
-                                    # 3. Update
-                                    full_df.loc[valid_indices, 'TaggedPitchType'] = new_tag
-                                    
-                                    # 4. Save
-                                    full_df.to_parquet("ncaa_data_2025.parquet", index=False)
-                                    
-                                    # 5. FORCE CLEAR EVERYTHING
-                                    st.cache_data.clear()
-                                    if 'data' in st.session_state: del st.session_state['data']
-                                    
-                                    st.success(f"✅ Fixed {len(valid_indices)} pitches! Reloading...")
-                                    st.rerun()
-                                    
-                                except Exception as e:
-                                    st.error(f"❌ Save failed: {e}")
+                        safe_indices = [int(i) for i in safe_indices if i is not None]
+                        
+                        if safe_indices:
+                            st.info(f"🔍 Debug: You selected {len(safe_indices)} pitches. IDs: {safe_indices[:5]}...")
+                            
+                            col1, col2 = st.columns([2, 1])
+                            with col1:
+                                new_tag = st.selectbox(
+                                    f"Change to:", 
+                                    ["Fastball", "Sinker", "Cutter", "Slider", "Sweeper", "Curveball", "Knuckle Curve", "Changeup", "Splitter"],
+                                    key=f"fix_{chart_name}"
+                                )
+                            with col2:
+                                st.write("") 
+                                if st.button(f"✅ Apply Fix", key=f"btn_{chart_name}"):
+                                    try:
+                                        # 1. LOAD MASTER FILE FROM CACHE
+                                        path = get_local_data_path()
+                                        full_df = pd.read_parquet(path)
+                                        
+                                        # 2. VALIDATE INDICES
+                                        valid_indices = [i for i in safe_indices if i in full_df.index]
+                                        
+                                        if len(valid_indices) == 0:
+                                            st.error("❌ Critical Error: Indices not found.")
+                                            return
+                                        
+                                        # 3. UPDATE THE DATA
+                                        full_df.loc[valid_indices, 'TaggedPitchType'] = new_tag
+                                        
+                                        # 4. SAVE TEMP COPY
+                                        full_df.to_parquet("ncaa_data_2025_fixed.parquet", index=False)
+                                        
+                                        # 5. CLEAR CACHE & RELOAD
+                                        st.cache_data.clear()
+                                        st.success(f"✅ Fixed {len(valid_indices)} pitches! Please download the file below.")
+                                        
+                                    except Exception as e:
+                                        st.error(f"❌ Save failed: {e}")
 
-            # --- SECTION A: VELOCITY vs SPIN ---
-            st.subheader("Velocity vs. Spin Rate")
-            st.caption("Admin Tip: Lasso Select incorrect pitches to fix them.")
-            
-            fig_ss = px.scatter(
-                plot_df, x='RelSpeed', y='SpinRate', color='TaggedPitchType',
-                color_discrete_map=pitch_palette,
-                labels={'RelSpeed': 'Velocity (MPH)', 'SpinRate': 'Spin Rate (RPM)'},
-                # KEY SAFETY: Pass 'master_index' so we know the true ID
-                custom_data=['master_index'] 
-            )
-            
-            fig_ss.update_layout(dragmode='lasso', clickmode='event+select', height=500, plot_bgcolor='white')
-            fig_ss.update_traces(marker=dict(size=8, line=dict(width=1, color='white')))
+                # --- 4. SUMMARY METRICS ---
+                st.markdown(f"### 📊 Pitching Summary: {pitcher}")
+                
+                summary = p_data.groupby('TaggedPitchType').agg(
+                    Count=('RelSpeed', 'count'),
+                    Avg_Velo=('RelSpeed', 'mean'),
+                    Max_Velo=('RelSpeed', 'max'),
+                    Spin=('SpinRate', 'mean'),
+                    IVB=('InducedVertBreak', 'mean'),
+                    HB=('HorzBreak', 'mean'),
+                    Whiff_Pct=('PitchCall', lambda x: (x == 'StrikeSwinging').sum() / (x.isin(['StrikeSwinging', 'InPlay', 'Foul'])).sum() * 100)
+                ).reset_index().round(1)
+                
+                st.dataframe(summary, use_container_width=True, hide_index=True)
 
-            selection_ss = st.plotly_chart(fig_ss, on_select="rerun", use_container_width=True)
-            show_admin_fix_widget(selection_ss, "VeloSpin")
-
-            st.divider()
-
-            # --- SECTION B: MOVEMENT PROFILE ---
-            st.subheader("Interactive Movement Profile (IVB vs HB)")
-            
-            fig_mov = px.scatter(
-                plot_df, x='HorzBreak', y='InducedVertBreak', color='TaggedPitchType',
-                color_discrete_map=pitch_palette,
-                labels={'HorzBreak': 'Horizontal Break', 'InducedVertBreak': 'Induced Vert Break'},
-                # KEY SAFETY: Pass 'master_index' here too
-                custom_data=['master_index'] 
-            )
-            fig_mov.add_hline(y=0, line_dash="dash", line_color="black")
-            fig_mov.add_vline(x=0, line_dash="dash", line_color="black")
-            fig_mov.update_layout(dragmode='lasso', clickmode='event+select', height=600, plot_bgcolor='white')
-            fig_mov.update_traces(marker=dict(size=8, line=dict(width=1, color='white')))
-            fig_mov.update_xaxes(range=[-30, 30])
-            fig_mov.update_yaxes(range=[-30, 30])
-
-            selection_mov = st.plotly_chart(fig_mov, on_select="rerun", use_container_width=True)
-            show_admin_fix_widget(selection_mov, "Movement")
-            
-            # --- DOWNLOAD BUTTON (Only for Admin) ---
-            if st.session_state.get("is_admin", False):
                 st.divider()
-                st.markdown("### 💾 Save Your Work")
-                st.caption("Changes are temporary until you download this file and upload it to Hugging Face.")
-                with open("ncaa_data_2025.parquet", "rb") as f:
-                    st.download_button(
-                        label="⬇️ Download Fixed Data",
-                        data=f,
-                        file_name="ncaa_data_2025_fixed.parquet",
-                        mime="application/octet-stream"
-                    )
 
-            st.divider()
-
-            # --- SECTION C: BIOMETRIC ARM ANGLE (Preserved from your code) ---
-            st.subheader("🧬 Biometric Release Profile")
-            
-            arm_data = plot_df.dropna(subset=['RelSide', 'RelHeight'])
-            p_height_str = data['Height_Pitcher'].iloc[0] if not data.empty else "6' 0\""
-            try:
-                h_parts = p_height_str.replace('"', '').split("' ")
-                p_height_ft = float(h_parts[0]) + (float(h_parts[1]) / 12)
-            except:
-                p_height_ft = 6.0 
-
-            shoulder_height = p_height_ft * 0.80  
-            head_size = p_height_ft * 0.10
-
-            c1, c2 = st.columns([1, 2])
-            with c1:
-                avg_rel = arm_data.groupby('TaggedPitchType')[['RelSide', 'RelHeight']].mean().reset_index()
-                fig_st, ax_st = plt.subplots(figsize=(2.5, 4))
-                ax_st.plot([0, 0], [0, shoulder_height], color='black', linewidth=3)
-                ax_st.plot([-0.4, 0.4], [shoulder_height, shoulder_height], color='black', linewidth=3)
-                ax_st.add_patch(plt.Circle((0, shoulder_height + head_size/2), head_size/2, color='black', fill=False))
+                # --- 5. MOVEMENT PLOT (WITH LASSO) ---
+                st.markdown("### 🎯 Pitch Movement (Lasso to Fix)")
                 
-                legend_info = []
-                for _, row in avg_rel.iterrows():
-                    clr = pitch_palette.get(row['TaggedPitchType'], 'grey')
-                    sh_x = 0.4 if row['RelSide'] > 0 else -0.4
-                    ax_st.plot([sh_x, row['RelSide']], [shoulder_height, row['RelHeight']], color=clr, linewidth=2, marker='o', markersize=4)
+                fig_mov = px.scatter(
+                    p_data, x="HorzBreak", y="InducedVertBreak", 
+                    color="TaggedPitchType",
+                    hover_data=["RelSpeed", "SpinRate", "Date"],
+                    title=f"{pitcher} - Movement Profile",
+                    width=800, height=600
+                )
+                
+                fig_mov.add_shape(type="line", x0=-25, y0=0, x1=25, y1=0, line=dict(color="gray", width=1, dash="dash"))
+                fig_mov.add_shape(type="line", x0=0, y0=-25, x1=0, y1=25, line=dict(color="gray", width=1, dash="dash"))
+                fig_mov.update_layout(
+                    xaxis_title="Horizontal Break (in)", 
+                    yaxis_title="Induced Vertical Break (in)",
+                    xaxis=dict(range=[-25, 25]), 
+                    yaxis=dict(range=[-25, 25]),
+                    dragmode='lasso'
+                )
+                
+                # ADD INDEX TO CUSTOM DATA
+                fig_mov.update_traces(customdata=p_data.index)
+
+                selection_mov = st.plotly_chart(
+                    fig_mov, 
+                    on_select="rerun", 
+                    selection_mode=["box", "lasso"],
+                    use_container_width=True,
+                    key="hc_mov_scatter"
+                )
+
+                show_admin_fix_widget(selection_mov, "hc_movement_chart")
+                
+                st.divider()
+
+                # --- 6. VELOCITY & SPIN DISTRIBUTIONS ---
+                col_a, col_b = st.columns(2)
+                with col_a:
+                    st.subheader("🚀 Velocity Distribution")
+                    fig_velo = px.histogram(p_data, x="RelSpeed", color="TaggedPitchType", nbins=20, barmode="overlay")
+                    st.plotly_chart(fig_velo, use_container_width=True)
+                
+                with col_b:
+                    st.subheader("🔄 Spin Rate Distribution")
+                    fig_spin = px.histogram(p_data, x="SpinRate", color="TaggedPitchType", nbins=20, barmode="overlay")
+                    st.plotly_chart(fig_spin, use_container_width=True)
+
+                st.divider()
+
+                # --- 7. PERFORMANCE BY ZONE (DARK MODE FIXED) ---
+                st.subheader("📍 Performance by Zone")
+                
+                # ... [Use the same Helper functions 'get_advanced_metrics' & 'draw_performance_grid' defined earlier] ...
+                # Since you defined them in the main script scope or inside Tabs, ensure they are accessible.
+                # If they are inside the NCAA section, COPY/PASTE the "draw_performance_grid" function here too.
+                
+                # (For safety, here is the function again to prevent Scope Errors)
+                def draw_performance_grid_hc(data, hand):
+                    hand_col = 'PitcherThrows' if 'PitcherThrows' in data.columns else 'PitcherHand'
+                    df = data[data[hand_col] == hand].copy() if hand_col in data.columns else data.copy()
+                    df['PlateLocSide'] = pd.to_numeric(df['PlateLocSide'], errors='coerce')
+                    df['PlateLocHeight'] = pd.to_numeric(df['PlateLocHeight'], errors='coerce')
                     
-                    ang = np.degrees(np.arctan2(row['RelHeight'] - shoulder_height, abs(row['RelSide'] - sh_x)))
-                    legend_info.append((row['TaggedPitchType'], clr, ang))
+                    df['Zone'] = 'Outside'
+                    df.loc[(df['PlateLocSide'] < 0) & (df['PlateLocHeight'] > 2.5), 'Zone'] = 'Upper Left'
+                    df.loc[(df['PlateLocSide'] >= 0) & (df['PlateLocHeight'] > 2.5), 'Zone'] = 'Upper Right'
+                    df.loc[(df['PlateLocSide'] < 0) & (df['PlateLocHeight'] <= 2.5), 'Zone'] = 'Lower Left'
+                    df.loc[(df['PlateLocSide'] >= 0) & (df['PlateLocHeight'] <= 2.5), 'Zone'] = 'Lower Right'
 
-                ax_st.set_xlim(-4, 4); ax_st.set_ylim(0, p_height_ft + 1)
-                ax_st.axhline(0, color='gray', linestyle='--', linewidth=1)
-                ax_st.axis('off')
-                st.pyplot(fig_st)
-                
-                for name, clr, ang in legend_info:
-                    st.markdown(f"<span style='color:{clr}'>●</span> **{name}**: {ang:.1f}°", unsafe_allow_html=True)
+                    fig_zone = go.Figure()
+                    quads = [[[-0.83, 2.5, 0, 3.5], 'Upper Left'], [[0, 2.5, 0.83, 3.5], 'Upper Right'],
+                             [[-0.83, 1.5, 0, 2.5], 'Lower Left'], [[0, 1.5, 0.83, 2.5], 'Lower Right']]
 
-            with c2:
-                fig_cn, ax_cn = plt.subplots(figsize=(6, 5))
-                sns.scatterplot(data=arm_data, x='RelSide', y='RelHeight', hue='TaggedPitchType', palette=pitch_palette, s=40, alpha=0.5, ax=ax_cn)
-                ax_cn.set_title("Release Point Consistency")
-                st.pyplot(fig_cn)
-                plt.close('all') # Cleanup all matplotlib figures
+                    for coords, name in quads:
+                        z_df = df[df['Zone'] == name]
+                        if not z_df.empty:
+                            m = get_advanced_metrics(z_df)
+                            bg_color = "rgba(34, 139, 34, 0.9)" if m['OPS'] >= 0.800 else "rgba(178, 34, 34, 0.9)"
+                            fig_zone.add_shape(type="rect", x0=coords[0], y0=coords[1], x1=coords[2], y1=coords[3],
+                                line=dict(color="white", width=1), fillcolor=bg_color, layer="below")
+                            fig_zone.add_trace(go.Scatter(
+                                x=[(coords[0]+coords[2])/2], y=[(coords[1]+coords[3])/2],
+                                text=f"OPS: {m['OPS']:.3f}<br>AVG: {m['AVG']:.3f}<br>EV: {m['Avg EV']:.1f}",
+                                mode="text", textfont=dict(size=14, color="white", weight="bold"), showlegend=False
+                            ))
+                        else:
+                            fig_zone.add_shape(type="rect", x0=coords[0], y0=coords[1], x1=coords[2], y1=coords[3],
+                                line=dict(color="gray", width=1), fillcolor="rgba(100, 100, 100, 0.3)", layer="below")
 
-        else:
-            st.info("No pitch data available.")
+                    fig_zone.add_shape(type="path", path="M -0.4 0 L 0.4 0 L 0.4 0.2 L 0 0.4 L -0.4 0.2 Z",
+                                  line=dict(color="white", width=2), fillcolor="gray", layer="below")
+                    fig_zone.update_layout(
+                        title=dict(text=f"vs {hand}HP", x=0.5, font=dict(size=16, color="white")),
+                        xaxis=dict(range=[-1.5, 1.5], visible=False), yaxis=dict(range=[-0.5, 4.0], visible=False), 
+                        width=350, height=450, margin=dict(l=10, r=10, t=40, b=10), 
+                        plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)'
+                    )
+                    return fig_zone
+
+                z_col1, z_col2 = st.columns(2)
+                with z_col1:
+                    st.plotly_chart(draw_performance_grid_hc(p_data, 'Left'), use_container_width=True)
+                with z_col2:
+                    st.plotly_chart(draw_performance_grid_hc(p_data, 'Right'), use_container_width=True)
+
+                # --- 8. DOWNLOAD BUTTON (FOR ADMINS) ---
+                if st.session_state.get("is_admin", False):
+                    st.divider()
+                    st.markdown("### 💾 Save Your Work")
+                    if os.path.exists("ncaa_data_2025_fixed.parquet"):
+                        with open("ncaa_data_2025_fixed.parquet", "rb") as f:
+                            st.download_button(
+                                label="⬇️ Download Fixed Data",
+                                data=f,
+                                file_name="ncaa_data_2025.parquet",
+                                mime="application/octet-stream"
+                            )
+                    else:
+                        st.info("Make a change above to generate a downloadable file.")
 
 
     with tab3:
