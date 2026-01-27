@@ -1365,6 +1365,12 @@ elif app == "NCAA Pitcher":
         if pitcher:
             # Load Data (Optimized)
             p_data = load_player_data(pitcher, p_team, "pitcher")
+                # --- FIX: FORCE NUMERIC TYPES ---
+                # This converts "92.5" (string) to 92.5 (number) so .mean() works
+            numeric_cols = ['RelSpeed', 'SpinRate', 'InducedVertBreak', 'HorzBreak']
+            for col in numeric_cols:
+                if col in p_data.columns:
+                    p_data[col] = pd.to_numeric(p_data[col], errors='coerce')
             
             # Filter by Date
             if not p_data.empty:
@@ -2443,6 +2449,12 @@ elif app == "Holy Cross Pitcher":
         if pitcher:
             # Load Data (Optimized)
             p_data = load_player_data(pitcher, p_team, "pitcher")
+            # --- FIX: FORCE NUMERIC TYPES ---
+            # This converts "92.5" (string) to 92.5 (number) so .mean() works
+            numeric_cols = ['RelSpeed', 'SpinRate', 'InducedVertBreak', 'HorzBreak']
+            for col in numeric_cols:
+                if col in p_data.columns:
+                    p_data[col] = pd.to_numeric(p_data[col], errors='coerce')
             
             # Filter by Date
             if not p_data.empty:
