@@ -4,6 +4,8 @@ import numpy as np
 import os
 import plotly.graph_objects as go
 import plotly.express as px
+import matplotlib.pyplot as plt  # <--- This was missing
+import seaborn as sns            # <--- This was likely missing too
 from huggingface_hub import hf_hub_download
 
 # --- 1. PAGE CONFIGURATION ---
