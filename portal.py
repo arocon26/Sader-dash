@@ -1050,6 +1050,7 @@ elif app == "NCAA Hitter":
                 df['PlateLocSide'] = pd.to_numeric(df['PlateLocSide'], errors='coerce')
                 df['PlateLocHeight'] = pd.to_numeric(df['PlateLocHeight'], errors='coerce')
                 
+                # Define Zones
                 df['Zone'] = 'Outside'
                 df.loc[(df['PlateLocSide'] < 0) & (df['PlateLocHeight'] > 2.5), 'Zone'] = 'Upper Left'
                 df.loc[(df['PlateLocSide'] >= 0) & (df['PlateLocHeight'] > 2.5), 'Zone'] = 'Upper Right'
@@ -1058,40 +1059,56 @@ elif app == "NCAA Hitter":
 
                 fig_zone = go.Figure()
                 
+                # Coordinates for the 4 zones [x0, y0, x1, y1]
                 quads = [[[-0.83, 2.5, 0, 3.5], 'Upper Left'], [[0, 2.5, 0.83, 3.5], 'Upper Right'],
-                        [[-0.83, 1.5, 0, 2.5], 'Lower Left'], [[0, 1.5, 0.83, 2.5], 'Lower Right']]
+                         [[-0.83, 1.5, 0, 2.5], 'Lower Left'], [[0, 1.5, 0.83, 2.5], 'Lower Right']]
 
                 for coords, name in quads:
                     z_df = df[df['Zone'] == name]
                     if not z_df.empty:
                         m = get_advanced_metrics(z_df)
-                        # FIX: Darker Backgrounds (0.8 opacity) so White text pops
-                        bg_color = "rgba(0, 100, 0, 0.8)" if m['OPS'] >= 0.800 else "rgba(180, 0, 0, 0.8)"
                         
-                        fig_zone.add_shape(type="rect", x0=coords[0], y0=coords[1], x1=coords[2], y1=coords[3],
-                                        line=dict(color="white", width=2), fillcolor=bg_color)
+                        # COLOR LOGIC: Darker Red/Green so White text is readable
+                        # Green = Forest Green (High Opacity)
+                        # Red = Firebrick (High Opacity)
+                        bg_color = "rgba(34, 139, 34, 0.9)" if m['OPS'] >= 0.800 else "rgba(178, 34, 34, 0.9)"
                         
+                        # 1. Draw the Colored Rectangle (Layer=Below ensures text sits on top)
+                        fig_zone.add_shape(type="rect", 
+                            x0=coords[0], y0=coords[1], x1=coords[2], y1=coords[3],
+                            line=dict(color="white", width=1), 
+                            fillcolor=bg_color,
+                            layer="below" 
+                        )
+                        
+                        # 2. Draw the Text (Bright White & Bold)
                         fig_zone.add_trace(go.Scatter(
                             x=[(coords[0]+coords[2])/2], y=[(coords[1]+coords[3])/2],
-                            text=f"OPS: {m['OPS']:.3f}<br>AVG: {m['AVG']:.3f}<br>EV: {m['Avg EV']:.1f}<br>Whiff%: {m['Miss%']:.1f}%",
-                            # FIX: White Text + Bold
-                            mode="text", textfont=dict(size=12, color="white", weight='bold'), showlegend=False
+                            text=f"OPS: {m['OPS']:.3f}<br>AVG: {m['AVG']:.3f}<br>EV: {m['Avg EV']:.1f}",
+                            mode="text", 
+                            textfont=dict(size=14, color="white", weight="bold"), # <--- THE KEY FIX
+                            showlegend=False
                         ))
                     else:
-                        fig_zone.add_shape(type="rect", x0=coords[0], y0=coords[1], x1=coords[2], y1=coords[3],
-                                        line=dict(color="gray", width=1), fillcolor="rgba(50, 50, 50, 0.5)")
+                        # Empty Zone (Gray)
+                        fig_zone.add_shape(type="rect", 
+                            x0=coords[0], y0=coords[1], x1=coords[2], y1=coords[3],
+                            line=dict(color="gray", width=1), 
+                            fillcolor="rgba(100, 100, 100, 0.3)",
+                            layer="below"
+                        )
 
-                # Strike Zone Outline
+                # Draw Home Plate
                 fig_zone.add_shape(type="path", path="M -0.4 0 L 0.4 0 L 0.4 0.2 L 0 0.4 L -0.4 0.2 Z",
-                                line=dict(color="white", width=2), fillcolor="gray")
+                              line=dict(color="white", width=2), fillcolor="gray", layer="below")
 
                 fig_zone.update_layout(
-                    title=dict(text=f"vs {hand}HP", x=0.5, font=dict(color="white")),
+                    title=dict(text=f"vs {hand}HP", x=0.5, font=dict(size=16, color="white")),
                     xaxis=dict(range=[-1.5, 1.5], visible=False),
                     yaxis=dict(range=[-0.5, 4.0], visible=False), 
                     width=350, height=450,
-                    margin=dict(l=20, r=20, t=50, b=20), 
-                    plot_bgcolor='rgba(0,0,0,0)',
+                    margin=dict(l=10, r=10, t=40, b=10), 
+                    plot_bgcolor='rgba(0,0,0,0)', # Transparent background
                     paper_bgcolor='rgba(0,0,0,0)'
                 )
                 return fig_zone
@@ -2043,6 +2060,7 @@ elif app == "Holy Cross Hitter":
                     df['PlateLocSide'] = pd.to_numeric(df['PlateLocSide'], errors='coerce')
                     df['PlateLocHeight'] = pd.to_numeric(df['PlateLocHeight'], errors='coerce')
                     
+                    # Define Zones
                     df['Zone'] = 'Outside'
                     df.loc[(df['PlateLocSide'] < 0) & (df['PlateLocHeight'] > 2.5), 'Zone'] = 'Upper Left'
                     df.loc[(df['PlateLocSide'] >= 0) & (df['PlateLocHeight'] > 2.5), 'Zone'] = 'Upper Right'
@@ -2051,6 +2069,7 @@ elif app == "Holy Cross Hitter":
 
                     fig_zone = go.Figure()
                     
+                    # Coordinates for the 4 zones [x0, y0, x1, y1]
                     quads = [[[-0.83, 2.5, 0, 3.5], 'Upper Left'], [[0, 2.5, 0.83, 3.5], 'Upper Right'],
                             [[-0.83, 1.5, 0, 2.5], 'Lower Left'], [[0, 1.5, 0.83, 2.5], 'Lower Right']]
 
@@ -2058,33 +2077,48 @@ elif app == "Holy Cross Hitter":
                         z_df = df[df['Zone'] == name]
                         if not z_df.empty:
                             m = get_advanced_metrics(z_df)
-                            # FIX: Darker Backgrounds (0.8 opacity) so White text pops
-                            bg_color = "rgba(0, 100, 0, 0.8)" if m['OPS'] >= 0.800 else "rgba(180, 0, 0, 0.8)"
                             
-                            fig_zone.add_shape(type="rect", x0=coords[0], y0=coords[1], x1=coords[2], y1=coords[3],
-                                            line=dict(color="white", width=2), fillcolor=bg_color)
+                            # COLOR LOGIC: Darker Red/Green so White text is readable
+                            # Green = Forest Green (High Opacity)
+                            # Red = Firebrick (High Opacity)
+                            bg_color = "rgba(34, 139, 34, 0.9)" if m['OPS'] >= 0.800 else "rgba(178, 34, 34, 0.9)"
                             
+                            # 1. Draw the Colored Rectangle (Layer=Below ensures text sits on top)
+                            fig_zone.add_shape(type="rect", 
+                                x0=coords[0], y0=coords[1], x1=coords[2], y1=coords[3],
+                                line=dict(color="white", width=1), 
+                                fillcolor=bg_color,
+                                layer="below" 
+                            )
+                            
+                            # 2. Draw the Text (Bright White & Bold)
                             fig_zone.add_trace(go.Scatter(
                                 x=[(coords[0]+coords[2])/2], y=[(coords[1]+coords[3])/2],
-                                text=f"OPS: {m['OPS']:.3f}<br>AVG: {m['AVG']:.3f}<br>EV: {m['Avg EV']:.1f}<br>Whiff%: {m['Miss%']:.1f}%",
-                                # FIX: White Text + Bold
-                                mode="text", textfont=dict(size=12, color="white", weight='bold'), showlegend=False
+                                text=f"OPS: {m['OPS']:.3f}<br>AVG: {m['AVG']:.3f}<br>EV: {m['Avg EV']:.1f}",
+                                mode="text", 
+                                textfont=dict(size=14, color="white", weight="bold"), # <--- THE KEY FIX
+                                showlegend=False
                             ))
                         else:
-                            fig_zone.add_shape(type="rect", x0=coords[0], y0=coords[1], x1=coords[2], y1=coords[3],
-                                            line=dict(color="gray", width=1), fillcolor="rgba(50, 50, 50, 0.5)")
+                            # Empty Zone (Gray)
+                            fig_zone.add_shape(type="rect", 
+                                x0=coords[0], y0=coords[1], x1=coords[2], y1=coords[3],
+                                line=dict(color="gray", width=1), 
+                                fillcolor="rgba(100, 100, 100, 0.3)",
+                                layer="below"
+                            )
 
-                    # Strike Zone Outline
+                    # Draw Home Plate
                     fig_zone.add_shape(type="path", path="M -0.4 0 L 0.4 0 L 0.4 0.2 L 0 0.4 L -0.4 0.2 Z",
-                                    line=dict(color="white", width=2), fillcolor="gray")
+                                line=dict(color="white", width=2), fillcolor="gray", layer="below")
 
                     fig_zone.update_layout(
-                        title=dict(text=f"vs {hand}HP", x=0.5, font=dict(color="white")),
+                        title=dict(text=f"vs {hand}HP", x=0.5, font=dict(size=16, color="white")),
                         xaxis=dict(range=[-1.5, 1.5], visible=False),
                         yaxis=dict(range=[-0.5, 4.0], visible=False), 
                         width=350, height=450,
-                        margin=dict(l=20, r=20, t=50, b=20), 
-                        plot_bgcolor='rgba(0,0,0,0)',
+                        margin=dict(l=10, r=10, t=40, b=10), 
+                        plot_bgcolor='rgba(0,0,0,0)', # Transparent background
                         paper_bgcolor='rgba(0,0,0,0)'
                     )
                     return fig_zone
