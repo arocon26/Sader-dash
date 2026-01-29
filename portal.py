@@ -1980,134 +1980,110 @@ elif app == "Holy Cross Hitter":
                         plt.close(fig)
 
 elif app == "Holy Cross Pitcher":
+    # --- HEADER SECTION ---
     st.subheader("✝️ Holy Cross Pitcher Analytics")
 
     # Hard-coded Team Selection
     selected_team_full = "College of the Holy Cross"
     
-    # Step 1: Load ONLY pitcher names for Holy Cross (lazy loaded!)
+    # 1. Load Pitcher Names (Lazy Load)
     pitchers = load_players_for_team(selected_team_full, app_type="pitcher")
     
-    # Format names
+    # 2. Sidebar Selection
+    # Format names: "O'Connor, Andrew" -> "Andrew O'Connor"
     pitchers_formatted = [' '.join(p.split(', ')[::-1]) if ', ' in p else p for p in pitchers]
     selected_pitcher_fmt = st.sidebar.selectbox("Select Holy Cross Pitcher", options=pitchers_formatted)
     
-    # Convert back to raw format
+    # Convert back to raw format for data loading
     selected_pitcher_raw = ', '.join(selected_pitcher_fmt.split(' ')[::-1]) if ' ' in selected_pitcher_fmt else selected_pitcher_fmt
     
-    # Step 2: Load ONLY this pitcher's data (lazy loaded!)
+    # 3. Load Data (ONCE for all tabs)
     data = load_player_data(selected_pitcher_raw, selected_team_full, app_type="pitcher")
 
-    # --- [NEW LOCATION] PLAYER BIO HEADER (ABOVE TABS) ---
+    # --- BIO HEADER ---
     if not data.empty:
         p_info = data.iloc[0]
-        # Convert numeric bio info safely
         p_height = p_info['Height_Pitcher'] if pd.notnull(p_info['Height_Pitcher']) else "N/A"
         p_weight = f"{int(p_info['Weight_Pitcher'])} lbs" if pd.notnull(p_info['Weight_Pitcher']) else "N/A"
         p_jersey = f"#{int(p_info['Jersey_Pitcher'])}" if pd.notnull(p_info['Jersey_Pitcher']) else ""
         
-        # Display the Header
         st.header(f"{selected_pitcher_fmt} {p_jersey}")
         st.subheader(f"{selected_team_full} • {p_info['PitcherThrows']}HP")
         st.write(f"**Physicals:** {p_height} | {p_weight}")
         st.divider()
 
-    # ---- Application Tabs (NOW BELOW THE HEADER) ----
+    # --- TABS ---
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["Performance Data", "Stuff Visuals", "Sequencing", "Usage", "Heatmaps", "Trends"])
 
+    # --- TAB 1: PERFORMANCE DATA ---
     with tab1:
         if not data.empty:
-            # [DELETED OLD BIO HEADER FROM HERE]
-
-            # 1. Clean data for stats
-            data = data[~data['TaggedPitchType'].isin(['Undefined', 'Other'])]
+            # Clean data
+            df_tab1 = data[~data['TaggedPitchType'].isin(['Undefined', 'Other'])].copy()
             
-            # 2. Force numeric conversion for metrics
-            numeric_cols = [
-                'RelSpeed', 'SpinRate', 'InducedVertBreak', 'HorzBreak', 
-                'RelHeight', 'RelSide', 'Extension', 'VertApprAngle', 'HorzApprAngle'
-            ]
-            for col in numeric_cols:
-                data[col] = pd.to_numeric(data[col], errors='coerce')
+            # Force numeric
+            for col in ['RelSpeed', 'SpinRate', 'InducedVertBreak', 'HorzBreak', 'Extension']:
+                df_tab1[col] = pd.to_numeric(df_tab1[col], errors='coerce')
 
-            # 3. Summary Function
-            def get_summary(df):
-                summary = df.groupby('TaggedPitchType').agg(
-                    Count=('TaggedPitchType', 'count'),
-                    AvgVelo=('RelSpeed', 'mean'),
-                    MaxVelo=('RelSpeed', 'max'),
-                    AvgSpin=('SpinRate', 'mean'),
-                    AvgIVB=('InducedVertBreak', 'mean'),
-                    AvgHB=('HorzBreak', 'mean'),
-                    AvgExt=('Extension', 'mean')
-                ).reset_index()
-                
-                total_p = summary['Count'].sum()
-                summary['Usage'] = (summary['Count'] / total_p * 100).round(1)
-                summary = summary.rename(columns={'TaggedPitchType': 'Pitch', 'Count': '#'})
-                
-                ordered_cols = ['Pitch', '#', 'Usage', 'AvgVelo', 'MaxVelo', 'AvgSpin', 'AvgIVB', 'AvgHB', 'AvgExt']
-                return summary[ordered_cols]
-
+            # Summary Table
+            summary = df_tab1.groupby('TaggedPitchType').agg(
+                Count=('TaggedPitchType', 'count'),
+                AvgVelo=('RelSpeed', 'mean'),
+                MaxVelo=('RelSpeed', 'max'),
+                AvgSpin=('SpinRate', 'mean'),
+                AvgIVB=('InducedVertBreak', 'mean'),
+                AvgHB=('HorzBreak', 'mean'),
+                AvgExt=('Extension', 'mean')
+            ).reset_index()
+            
+            total_p = summary['Count'].sum()
+            summary['Usage'] = (summary['Count'] / total_p * 100).round(1)
+            summary = summary.rename(columns={'TaggedPitchType': 'Pitch', 'Count': '#'})
+            
             st.subheader("Pitch Shape Summary")
             st.dataframe(
-                get_summary(data).style.format({
+                summary[['Pitch', '#', 'Usage', 'AvgVelo', 'MaxVelo', 'AvgSpin', 'AvgIVB', 'AvgHB', 'AvgExt']].style.format({
                     'Usage': '{:.1f}%', 'AvgVelo': '{:.1f}', 'MaxVelo': '{:.1f}',
                     'AvgSpin': '{:.0f}', 'AvgIVB': '{:.1f}', 'AvgHB': '{:.1f}', 'AvgExt': '{:.2f}'
-                }),
-                use_container_width=True
+                }), use_container_width=True
             )
 
-            # 4. Advanced Splits (vLHH & vRHH)
+            # Splits
             for side in ['Left', 'Right']:
                 st.subheader(f"vs {side}-Handed Hitters")
-                split_df = data[data['BatterSide'] == side]
+                split_df = df_tab1[df_tab1['BatterSide'] == side]
                 if not split_df.empty:
-                    # Assumes helper functions are defined
                     stats_df = pitch_type_stats(split_df)
-                    overall_row = pd.DataFrame([overall_stats(split_df)])
-                    final_df = pd.concat([overall_row, stats_df], ignore_index=True)
-                    
-                    st.dataframe(final_df.style.format({
-                        'Usage': '{:.1f}%', 
-                        'AVG': '{:.3f}', 
-                        'SLG': '{:.3f}',
-                        'Zone%': '{:.1f}%',
-                        'Whiff%': '{:.1f}%', 
-                        'Zone Whiff%': '{:.1f}%',
-                        'Chase%': '{:.1f}%',
-                        'run_value': '{:.2f}', 
-                        'wOBA': '{:.3f}', 
-                        'xwOBA': '{:.3f}',
-                        'HH%': '{:.1f}%', 
-                        'GB%': '{:.1f}%'
-                    }), use_container_width=True)
+                    if not stats_df.empty:
+                        overall_row = pd.DataFrame([overall_stats(split_df)])
+                        final_df = pd.concat([overall_row, stats_df], ignore_index=True)
+                        st.dataframe(final_df.style.format({
+                            'Usage': '{:.1f}%', 'AVG': '{:.3f}', 'SLG': '{:.3f}',
+                            'Zone%': '{:.1f}%', 'Whiff%': '{:.1f}%', 'Zone Whiff%': '{:.1f}%',
+                            'Chase%': '{:.1f}%', 'run_value': '{:.2f}', 'wOBA': '{:.3f}',
+                            'xwOBA': '{:.3f}', 'HH%': '{:.1f}%', 'GB%': '{:.1f}%'
+                        }), use_container_width=True)
                 else:
                     st.info(f"No pitch data found against {side}-handed hitters.")
         else:
             st.info("Select a pitcher to view data.")
 
-    # ... The rest of Tabs 2-6 remain exactly the same ...
-
+    # --- TAB 2: STUFF VISUALS ---
     with tab2:
-        # --- 1. FILTERS (Date Range Only) ---
+        # Filters (Date Only - NO Player Selector Here)
         c1, c2 = st.columns([1, 3]) 
         with c1:
             date_range = st.date_input("Date Range", [pd.to_datetime("2025-01-01"), pd.to_datetime("2025-12-31")], key="hc_p_date_tab2")
 
-        # --- 2. DATA PROCESSING ---
-        # Use 'data' from the Sidebar selection
         if not data.empty:
             filtered_data = data.copy()
-            
-            # CRITICAL: Force numeric types for charts
-            numeric_cols = ['RelSpeed', 'SpinRate', 'InducedVertBreak', 'HorzBreak', 'ExitSpeed', 'PlateLocSide', 'PlateLocHeight']
-            for col in numeric_cols:
-                if col in filtered_data.columns:
-                    filtered_data[col] = pd.to_numeric(filtered_data[col], errors='coerce')
-            
             filtered_data['Date'] = pd.to_datetime(filtered_data['Date'])
             
+            # Numeric conversion for charts
+            for col in ['RelSpeed', 'SpinRate', 'InducedVertBreak', 'HorzBreak', 'PlateLocSide', 'PlateLocHeight']:
+                if col in filtered_data.columns:
+                    filtered_data[col] = pd.to_numeric(filtered_data[col], errors='coerce')
+
             # Apply Date Filter
             if len(date_range) == 2:
                 filtered_data = filtered_data[(filtered_data['Date'] >= pd.to_datetime(date_range[0])) & 
@@ -2116,151 +2092,94 @@ elif app == "Holy Cross Pitcher":
             if filtered_data.empty:
                 st.warning("No data found for this date range.")
             else:
-                # --- HELPER: SAFE FIXING WIDGET ---
-                # This stays local because it interacts with specific session state keys
+                # --- LOCAL FIXING WIDGET ---
                 def show_admin_fix_widget(selected_data, chart_name):
-                    if not st.session_state.get("is_admin", False):
-                        return
-
+                    if not st.session_state.get("is_admin", False): return
                     if selected_data and "selection" in selected_data:
                         pts = selected_data["selection"]["points"]
                         if not pts: return
-
-                        # Safe Index Extraction
-                        safe_indices = []
-                        for p in pts:
-                            try:
-                                cd = p.get("customdata")
-                                if isinstance(cd, list): val = cd[0]
-                                elif isinstance(cd, dict): val = cd.get("0") or list(cd.values())[0]
-                                else: val = cd
-                                safe_indices.append(val)
-                            except: pass
                         
-                        safe_indices = [int(i) for i in safe_indices if i is not None]
+                        safe_indices = [int(p["customdata"][0]) for p in pts if "customdata" in p]
                         
                         if safe_indices:
                             st.info(f"🔍 Selected {len(safe_indices)} pitches.")
-                            
                             c1, c2 = st.columns([2, 1])
                             with c1:
-                                new_tag = st.selectbox(
-                                    f"Change to:", 
-                                    list(PITCH_PALETTE.keys()), # Uses Global Palette
-                                    key=f"fix_{chart_name}"
-                                )
+                                new_tag = st.selectbox("Change to:", list(PITCH_PALETTE.keys()), key=f"fix_{chart_name}")
                             with c2:
                                 st.write("") 
                                 if st.button(f"✅ Apply Fix", key=f"btn_{chart_name}"):
                                     try:
                                         path = get_local_data_path()
                                         full_df = pd.read_parquet(path)
-                                        valid_indices = [i for i in safe_indices if i in full_df.index]
-                                        
-                                        if len(valid_indices) == 0:
-                                            st.error("❌ Error: Indices not found.")
-                                            return
-                                        
-                                        full_df.loc[valid_indices, 'TaggedPitchType'] = new_tag
+                                        full_df.loc[safe_indices, 'TaggedPitchType'] = new_tag
                                         full_df.to_parquet("ncaa_data_2025_fixed.parquet", index=False)
                                         st.cache_data.clear()
-                                        st.success(f"✅ Fixed {len(valid_indices)} pitches! Please download below.")
-                                    except Exception as e:
-                                        st.error(f"❌ Save failed: {e}")
+                                        st.success("✅ Fixed! Download below.")
+                                    except Exception as e: st.error(f"Error: {e}")
 
-                # --- 3. MOVEMENT PROFILE (IVB vs HB) ---
+                # 1. MOVEMENT PROFILE
                 st.subheader("Interactive Movement Profile (IVB vs HB)")
                 st.caption("Lasso to inspect or fix pitch tags.")
                 
                 fig_mov = px.scatter(
                     filtered_data, x="HorzBreak", y="InducedVertBreak", 
-                    color="TaggedPitchType",
-                    color_discrete_map=PITCH_PALETTE, # Uses Global Palette
-                    hover_data=["RelSpeed", "SpinRate", "Date"],
-                    width=650, height=650
+                    color="TaggedPitchType", color_discrete_map=PITCH_PALETTE,
+                    hover_data=["RelSpeed", "SpinRate", "Date"], width=650, height=650
                 )
-                
                 fig_mov.add_hline(y=0, line_dash="dash", line_color="black")
                 fig_mov.add_vline(x=0, line_dash="dash", line_color="black")
-                
                 fig_mov.update_layout(
-                    xaxis_title="Horizontal Break (in)", 
-                    yaxis_title="Induced Vertical Break (in)",
-                    xaxis=dict(range=[-30, 30], gridcolor='lightgrey'), 
-                    yaxis=dict(range=[-30, 30], gridcolor='lightgrey', scaleanchor="x", scaleratio=1),
-                    plot_bgcolor='white',
-                    dragmode='lasso'
+                    xaxis=dict(range=[-30, 30], title="Horizontal Break (in)"), 
+                    yaxis=dict(range=[-30, 30], title="Induced Vertical Break (in)", scaleanchor="x", scaleratio=1),
+                    plot_bgcolor='white', dragmode='lasso'
                 )
-                fig_mov.update_traces(customdata=filtered_data.index)
+                fig_mov.update_traces(customdata=filtered_data.index) # Required for fixer
 
-                selection_mov = st.plotly_chart(
-                    fig_mov, 
-                    on_select="rerun", 
-                    selection_mode=["box", "lasso"],
-                    use_container_width=False,
-                    key="hc_mov_scatter"
-                )
+                selection_mov = st.plotly_chart(fig_mov, on_select="rerun", selection_mode=["box", "lasso"], key="hc_mov_scatter")
                 show_admin_fix_widget(selection_mov, "hc_movement_chart")
                 
                 st.divider()
 
-                # --- 4. VELOCITY vs SPIN RATE ---
+                # 2. VELOCITY vs SPIN RATE (The Missing Chart)
                 st.subheader("Velocity vs. Spin Rate")
                 st.caption("Identify misclassified pitches by spin/velo clusters.")
 
                 fig_ss = px.scatter(
                     filtered_data, x='RelSpeed', y='SpinRate', 
-                    color='TaggedPitchType',
-                    color_discrete_map=PITCH_PALETTE, # Uses Global Palette
+                    color='TaggedPitchType', color_discrete_map=PITCH_PALETTE,
                     labels={'RelSpeed': 'Velocity (MPH)', 'SpinRate': 'Spin Rate (RPM)'},
-                    hover_data=['RelSpeed', 'SpinRate', 'Date'],
-                    width=750, height=500
+                    hover_data=['RelSpeed', 'SpinRate', 'Date'], width=750, height=500
                 )
-                
-                fig_ss.update_layout(
-                    dragmode='lasso', 
-                    plot_bgcolor='white',
-                    xaxis=dict(gridcolor='lightgrey'), 
-                    yaxis=dict(gridcolor='lightgrey')
-                )
+                fig_ss.update_layout(plot_bgcolor='white', dragmode='lasso')
                 fig_ss.update_traces(customdata=filtered_data.index, marker=dict(size=8, line=dict(width=1, color='white')))
 
-                selection_ss = st.plotly_chart(
-                    fig_ss, 
-                    on_select="rerun", 
-                    selection_mode=["box", "lasso"],
-                    use_container_width=False,
-                    key="hc_velo_spin_scatter"
-                )
+                selection_ss = st.plotly_chart(fig_ss, on_select="rerun", selection_mode=["box", "lasso"], key="hc_velo_spin_scatter")
                 show_admin_fix_widget(selection_ss, "hc_velo_spin_chart")
 
                 st.divider()
 
-                # --- 5. PERFORMANCE BY ZONE ---
+                # 3. PERFORMANCE BY ZONE
                 st.subheader("📍 Performance by Zone")
                 z_col1, z_col2 = st.columns(2)
                 with z_col1:
-                    # Uses Global Function defined at top of file
                     st.plotly_chart(draw_performance_grid(filtered_data, 'Left'), use_container_width=True)
                 with z_col2:
                     st.plotly_chart(draw_performance_grid(filtered_data, 'Right'), use_container_width=True)
 
-                # --- 6. ADMIN DOWNLOAD ---
+                # 4. ADMIN DOWNLOAD
                 if st.session_state.get("is_admin", False):
                     st.divider()
                     st.markdown("### 💾 Save Your Work")
                     if os.path.exists("ncaa_data_2025_fixed.parquet"):
                         with open("ncaa_data_2025_fixed.parquet", "rb") as f:
-                            st.download_button(
-                                label="⬇️ Download Fixed Data",
-                                data=f,
-                                file_name="ncaa_data_2025.parquet",
-                                mime="application/octet-stream"
-                            )
+                            st.download_button("⬇️ Download Fixed Data", f, "ncaa_data_2025.parquet", "application/octet-stream")
                     else:
                         st.info("Make a change above to generate a downloadable file.")
         else:
             st.info("Select a pitcher in the sidebar to view data.")
+
+    # ... (Keep Tabs 3, 4, 5, 6 empty or with placeholder code if you haven't built them yet) ...
 
 
     with tab3:
