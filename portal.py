@@ -206,30 +206,64 @@ def draw_baseball_field():
 
 def plot_trend_lines(df):
     """Plots metric trends over time (Game by Game)"""
+    # 1. Prep Data & FORCE NUMERICS
     df = df.copy()
+    
+    # --- FIX: Ensure these columns are numbers before calculating mean ---
+    numeric_cols = ['RelSpeed', 'SpinRate', 'InducedVertBreak', 'HorzBreak']
+    for col in numeric_cols:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+    # -------------------------------------------------------------------
+
+    # Ensure Date is datetime
     df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
     df = df.dropna(subset=['Date'])
     
-    valid_types = df['TaggedPitchType'].value_counts()[lambda x: x >= 5].index.tolist()
+    # 2. Filter for significant pitch types (ignore types thrown < 5 times total)
+    type_counts = df['TaggedPitchType'].value_counts()
+    valid_types = type_counts[type_counts >= 5].index.tolist()
     df = df[df['TaggedPitchType'].isin(valid_types)]
     
+    # 3. Group by Date
     daily = df.groupby(['Date', 'TaggedPitchType']).agg({
-        'RelSpeed': 'mean', 'SpinRate': 'mean', 'InducedVertBreak': 'mean', 'HorzBreak': 'mean'
-    }).reset_index().sort_values('Date')
+        'RelSpeed': 'mean',
+        'SpinRate': 'mean',
+        'InducedVertBreak': 'mean',
+        'HorzBreak': 'mean'
+    }).reset_index()
     
+    # Sort by date
+    daily = daily.sort_values('Date')
+    
+    # 4. Create Tabs
     t1, t2, t3, t4 = st.tabs(["Velocity", "Spin Rate", "Vertical Break", "Horizontal Break"])
     
     def create_trend_chart(data, y_col, title, y_label):
-        fig = px.line(data, x='Date', y=y_col, color='TaggedPitchType', title=title, markers=True, color_discrete_map=PITCH_PALETTE, labels={y_col: y_label, 'Date': 'Date'})
+        fig = px.line(
+            data, x='Date', y=y_col, color='TaggedPitchType',
+            title=title, markers=True,
+            color_discrete_map=PITCH_PALETTE,
+            labels={y_col: y_label, 'Date': 'Date'}
+        )
         fig.update_layout(height=450, plot_bgcolor='white', hovermode="x unified")
         fig.update_traces(line=dict(width=3), marker=dict(size=8))
-        fig.update_xaxes(showgrid=True, gridcolor='whitesmoke'); fig.update_yaxes(showgrid=True, gridcolor='whitesmoke')
+        fig.update_xaxes(showgrid=True, gridcolor='whitesmoke')
+        fig.update_yaxes(showgrid=True, gridcolor='whitesmoke')
         return fig
     
-    with t1: st.plotly_chart(create_trend_chart(daily, 'RelSpeed', "Average Velocity Trend", "Velocity (MPH)"), use_container_width=True)
-    with t2: st.plotly_chart(create_trend_chart(daily, 'SpinRate', "Average Spin Rate Trend", "Spin Rate (RPM)"), use_container_width=True)
-    with t3: st.plotly_chart(create_trend_chart(daily, 'InducedVertBreak', "Vertical Break (IVB) Trend", "IVB (Inches)"), use_container_width=True)
-    with t4: st.plotly_chart(create_trend_chart(daily, 'HorzBreak', "Horizontal Break Trend", "Horizontal Break (Inches)"), use_container_width=True)
+    with t1:
+        st.plotly_chart(create_trend_chart(daily, 'RelSpeed', "Average Velocity Trend", "Velocity (MPH)"), use_container_width=True)
+        
+    with t2:
+        st.plotly_chart(create_trend_chart(daily, 'SpinRate', "Average Spin Rate Trend", "Spin Rate (RPM)"), use_container_width=True)
+        
+    with t3:
+        st.plotly_chart(create_trend_chart(daily, 'InducedVertBreak', "Vertical Break (IVB) Trend", "IVB (Inches)"), use_container_width=True)
+
+    with t4:
+        st.plotly_chart(create_trend_chart(daily, 'HorzBreak', "Horizontal Break Trend", "Horizontal Break (Inches)"), use_container_width=True)
+
 
 def calc_zone_whiff_and_chase(df):
     df = df.copy()
