@@ -1042,13 +1042,35 @@ elif app == "NCAA Pitcher":
                 st.warning("No data found for this date range.")
             else:
                 # --- LOCAL FIXING WIDGET (Admin) ---
+                # --- LOCAL FIXING WIDGET (ROBUST VERSION) ---
                 def show_admin_fix_widget(selected_data, chart_name):
                     if not st.session_state.get("is_admin", False): return
+                    
                     if selected_data and "selection" in selected_data:
                         pts = selected_data["selection"]["points"]
                         if not pts: return
                         
-                        safe_indices = [int(p["customdata"][0]) for p in pts if "customdata" in p]
+                        # ROBUST EXTRACTION LOGIC
+                        safe_indices = []
+                        for p in pts:
+                            try:
+                                cd = p.get("customdata")
+                                # Case 1: It is a list (Standard Plotly) -> Take first item
+                                if isinstance(cd, list): 
+                                    val = cd[0]
+                                # Case 2: It is a Dict (Newer Streamlit) -> Take first value
+                                elif isinstance(cd, dict): 
+                                    val = list(cd.values())[0]
+                                # Case 3: It is already a plain number -> Use directly
+                                else: 
+                                    val = cd
+                                    
+                                safe_indices.append(val)
+                            except: 
+                                pass
+                        
+                        # Ensure they are valid integers
+                        safe_indices = [int(i) for i in safe_indices if i is not None]
                         
                         if safe_indices:
                             st.info(f"🔍 Selected {len(safe_indices)} pitches.")
@@ -1061,7 +1083,15 @@ elif app == "NCAA Pitcher":
                                     try:
                                         path = get_local_data_path()
                                         full_df = pd.read_parquet(path)
-                                        full_df.loc[safe_indices, 'TaggedPitchType'] = new_tag
+                                        
+                                        # Validate against master file
+                                        valid_indices = [i for i in safe_indices if i in full_df.index]
+                                        
+                                        if len(valid_indices) == 0:
+                                            st.error("❌ Error: Indices not found in master file.")
+                                            return
+
+                                        full_df.loc[valid_indices, 'TaggedPitchType'] = new_tag
                                         full_df.to_parquet("ncaa_data_2025_fixed.parquet", index=False)
                                         st.cache_data.clear()
                                         st.success("✅ Fixed! Download below.")
