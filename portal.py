@@ -4,84 +4,54 @@ import numpy as np
 import os
 import plotly.graph_objects as go
 import plotly.express as px
-import matplotlib.pyplot as plt  # <--- This was missing
-import seaborn as sns            # <--- This was likely missing too
+import matplotlib.pyplot as plt
+import seaborn as sns
 from huggingface_hub import hf_hub_download
 
 # --- 1. PAGE CONFIGURATION ---
 st.set_page_config(layout="wide", page_title="Sader Dash")
 
-# Ensure we are in the correct directory (for finding the logo)
+# Ensure we are in the correct directory
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
-# --- 2. LOGIN SCREEN CONFIGURATION (FORCE WIDTH) ---
+# --- 2. LOGIN SCREEN CONFIGURATION ---
 login_style = """
 <style>
-    /* 1. Background Color */
-    .stApp {
-        background-color: #f0f2f6;
-    }
-
-    /* 2. THE CARD - CENTERED WITH PURE CSS */
+    .stApp { background-color: #f0f2f6; }
     [data-testid="stForm"] {
-        background-color: #450084; /* Holy Cross Purple */
+        background-color: #450084;
         padding: 50px;
         border-radius: 20px;
         box-shadow: 0px 10px 40px rgba(0,0,0,0.4);
         text-align: center;
-        width: 600px !important;    /* Force a fixed width */
-        max-width: 90%;             /* Safety for mobile phones */
-        margin: 0 auto;             /* Center horizontally */
+        width: 600px !important;
+        max-width: 90%;
+        margin: 0 auto;
         display: block;
         margin-top: 100px;
     }
-
-    /* 3. INPUT BOX - BIGGER */
     .stTextInput input {
-        background-color: white !important;
-        color: black !important;
-        border-radius: 10px;
-        padding: 15px;
-        font-size: 20px;
+        background-color: white !important; color: black !important;
+        border-radius: 10px; padding: 15px; font-size: 20px;
     }
-    
-    /* 4. LABELS - WHITE & BIG */
     .stTextInput label {
-        color: white !important;
-        font-weight: bold;
-        font-size: 24px;
-        margin-bottom: 8px;
+        color: white !important; font-weight: bold; font-size: 24px; margin-bottom: 8px;
     }
-    
-    /* 5. BUTTON - BIGGER */
     .stButton button {
-        background-color: white !important;
-        color: #450084 !important;
-        font-weight: bold !important;
-        font-size: 22px !important;
-        border-radius: 10px !important;
-        padding-top: 12px;
-        padding-bottom: 12px;
-        width: 100%;
-        margin-top: 15px;
-        border: none !important;
+        background-color: white !important; color: #450084 !important;
+        font-weight: bold !important; font-size: 22px !important;
+        border-radius: 10px !important; width: 100%; margin-top: 15px; border: none !important;
     }
-    .stButton button:hover {
-        background-color: #e0e0e0 !important;
-    }
+    .stButton button:hover { background-color: #e0e0e0 !important; }
 </style>
 """
 
 def check_password():
-    """Returns True if the user enters the correct password."""
     if st.session_state.get('password_correct', False):
         return True
     
-    # Inject the CSS
     st.markdown(login_style, unsafe_allow_html=True)
-    
     with st.form("login_form"):
-        # LOGO SECTION
         left, mid, right = st.columns([1, 2, 1])
         with mid:
             if os.path.exists("hc_logo.svg"):
@@ -90,29 +60,38 @@ def check_password():
                 st.image("hc_logo.png", use_container_width=True)
             else:
                 st.markdown("<h1 style='text-align: center; color: white;'>⚾️</h1>", unsafe_allow_html=True)
-        
         st.markdown("<br>", unsafe_allow_html=True)
-        
-        # INPUTS
         password = st.text_input("Password:", type="password", key="password_input")
-        submit_button = st.form_submit_button("LOG IN")
-        
-        if submit_button:
+        if st.form_submit_button("LOG IN"):
             if password == "gocrossgo2026":
                 st.session_state['password_correct'] = True
                 st.rerun()
             else:
                 st.error("❌ Incorrect Password")
-
     return False
 
-# --- 3. GATEKEEPER ---
 if not check_password():
     st.stop()
 
-# --- 4. DATA CONFIGURATION & CONSTANTS ---
+# --- 3. GLOBAL CONSTANTS & PALETTES ---
 
-# NCAA D1 BASELINES (2025 APPROX) - For Context
+# Statcast Standard Hex Codes
+PITCH_PALETTE = {
+    'Fastball': '#D22D49',  # Red
+    'Four-Seam': '#D22D49',
+    'Sinker': '#FE9D00',    # Orange
+    'One-Seam Fastball': '#FE9D00',
+    'Cutter': '#933F2C',    # Maroon
+    'Slider': '#EEE716',    # Yellow
+    'Sweeper': '#DDB33A',   # Gold
+    'Curveball': '#00D1ED', # Cyan
+    'Knuckle Curve': '#6236CD',
+    'Changeup': '#1DBE3A',  # Green
+    'Splitter': '#3BACAC',  # Teal
+    'Knuckleball': '#867A08',
+    'Other': '#999999'
+}
+
 NCAA_BASELINES = {
     'Fastball': {'Velo': 90.5, 'Spin': 2250, 'IVB': 16.0, 'HB': 8.0, 'Whiff': 18.0},
     'Sinker':   {'Velo': 89.5, 'Spin': 2100, 'IVB': 8.0,  'HB': 15.0, 'Whiff': 14.0},
@@ -124,78 +103,47 @@ NCAA_BASELINES = {
 }
 
 ESSENTIAL_COLS = [
-    # Identifiers
     'Pitcher', 'Batter', 'PitcherTeam', 'newestTeamName_Pitcher', 'newestTeamName_Batter', 'Date',
-    # Pitch Metrics
     'TaggedPitchType', 'RelSpeed', 'SpinRate', 'InducedVertBreak', 'HorzBreak', 
     'RelHeight', 'RelSide', 'Extension', 'VertApprAngle', 'HorzApprAngle',
-    # Plate Location & Strike Zone
-    'PlateLocHeight', 'PlateLocSide',
-    # Outcomes & Context
-    'PitchCall', 'KorBB', 'PlayResult', 'Balls', 'Strikes', 'PitchofPA', 'PAofInning',
-    'BatterSide', 'PitcherThrows',
-    # Hit Data
-    'ExitSpeed', 'Angle', 'Distance', 'Direction',
-    # Advanced Metrics
-    'run_value', 'wOBA_result', 'xwOBA_result',
-    # Bio Data
-    'Height_Pitcher', 'Weight_Pitcher', 'Jersey_Pitcher',
-    'Height_Batter', 'Weight_Batter', 'Jersey_Batter'
+    'PlateLocHeight', 'PlateLocSide', 'PitchCall', 'KorBB', 'PlayResult', 'Balls', 'Strikes', 
+    'PitchofPA', 'PAofInning', 'BatterSide', 'PitcherThrows',
+    'ExitSpeed', 'Angle', 'Distance', 'Direction', 'run_value', 'wOBA_result', 'xwOBA_result',
+    'Height_Pitcher', 'Weight_Pitcher', 'Jersey_Pitcher', 'Height_Batter', 'Weight_Batter', 'Jersey_Batter'
 ]
 
-# --- 5. OPTIMIZED DATA LOADING FUNCTIONS ---
+# --- 4. DATA LOADING FUNCTIONS ---
 
 @st.cache_resource(show_spinner=False)
 def get_local_data_path():
     """Cached helper to download/retrieve the parquet file path from Hugging Face Datasets"""
-    # This checks for updates automatically. If the file is unchanged, it uses the cached version.
-    return hf_hub_download(
-        repo_id="arocon26/Sader-Data", 
-        repo_type="dataset", 
-        filename="ncaa_data_2025.parquet"
-    )
+    return hf_hub_download(repo_id="arocon26/Sader-Data", repo_type="dataset", filename="ncaa_data_2025.parquet")
 
 @st.cache_data(ttl=3600, max_entries=5, show_spinner=False)
 def load_team_names(app_type="hitter"):
-    """Load ONLY team names"""
     path = get_local_data_path()
-    
-    if app_type == "hitter":
-        col = "newestTeamName_Batter"
-    else:
-        col = "newestTeamName_Pitcher"
-    
+    col = "newestTeamName_Batter" if app_type == "hitter" else "newestTeamName_Pitcher"
     try:
         df = pd.read_parquet(path, columns=[col])
-        teams = sorted(df[col].dropna().unique())
-        return teams
+        return sorted(df[col].dropna().unique())
     except Exception as e:
-        st.error(f"Error loading teams: {e}")
         return []
 
 @st.cache_data(ttl=3600, max_entries=5, show_spinner=False)
 def load_players_for_team(team_name, app_type="hitter"):
-    """Load ONLY player names for selected team"""
     path = get_local_data_path()
-    
-    if app_type == "hitter":
-        team_col = "newestTeamName_Batter"
-        player_col = "Batter"
-    else:
-        team_col = "newestTeamName_Pitcher"
-        player_col = "Pitcher"
-    
+    team_col = "newestTeamName_Batter" if app_type == "hitter" else "newestTeamName_Pitcher"
+    player_col = "Batter" if app_type == "hitter" else "Pitcher"
     try:
         df = pd.read_parquet(path, columns=[team_col, player_col])
         df = df[df[team_col] == team_name]
-        players = sorted(df[player_col].dropna().unique())
-        return players
-    except Exception as e:
+        return sorted(df[player_col].dropna().unique())
+    except Exception:
         return []
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_player_data(player_name, team_name, app_type="hitter"):
-    """Load ONLY data for selected player - Optimized with Smart Caching"""
+    """Load ONLY data for selected player - Optimized with Smart Caching & Safe Index"""
     if app_type == "hitter":
         team_col = "newestTeamName_Batter"
         player_col = "Batter"
@@ -204,532 +152,178 @@ def load_player_data(player_name, team_name, app_type="hitter"):
         player_col = "Pitcher"
     
     try:
-        # 1. Get the fast local path (shared function)
         local_path = get_local_data_path()
-
-        # 2. Read from Local Disk (Fast!)
-        df = pd.read_parquet(
-            local_path, 
-            columns=ESSENTIAL_COLS, 
-            engine='pyarrow'
-        )
-
-        # 3. Filter in Memory
+        # Read FULL file first to preserve Master Index (Crucial for Admin Fixes)
+        df = pd.read_parquet(local_path, columns=ESSENTIAL_COLS, engine='pyarrow')
         df = df[(df[team_col] == team_name) & (df[player_col] == player_name)]
         
-    except Exception as e:
-        st.warning(f"⚠️ Load failed: {e}")
+        # Clean pitch types (But keep Sinker separate!)
+        if not df.empty and 'TaggedPitchType' in df.columns:
+            df['TaggedPitchType'] = df['TaggedPitchType'].replace({
+                'ChangeUp': 'Changeup', 
+                'One-Seam Fastball': 'Sinker'
+            })
+        return df
+    except Exception:
         return pd.DataFrame()
-    
-    # Clean pitch types
-    if not df.empty and 'TaggedPitchType' in df.columns:
-        df['TaggedPitchType'] = df['TaggedPitchType'].replace({
-            'ChangeUp': 'Changeup', 
-            'One-Seam Fastball': 'Sinker'
-        })
-    
-    return df
 
+# --- 5. INITIALIZE ADMIN STATE & HEADER ---
+if "is_admin" not in st.session_state: st.session_state["is_admin"] = False
+if "show_login" not in st.session_state: st.session_state["show_login"] = False
 
-# --- INITIALIZE ADMIN STATE ---
-if "is_admin" not in st.session_state:
-    st.session_state["is_admin"] = False
-if "show_login" not in st.session_state:
-    st.session_state["show_login"] = False
-
-# --- TOP HEADER BAR ---
 head_col1, head_col2 = st.columns([5, 1])
 with head_col1:
     st.title("Sader Dash ✝️ ⚾️")
-
 with head_col2:
     if not st.session_state["is_admin"]:
-        if st.button("🔓 Edit Mode"):
-            st.session_state["show_login"] = not st.session_state["show_login"]
+        if st.button("🔓 Edit Mode"): st.session_state["show_login"] = not st.session_state["show_login"]
     else:
         if st.button("🔒 Lock"):
             st.session_state["is_admin"] = False
             st.rerun()
 
-# --- HIDDEN LOGIN BOX ---
 if st.session_state["show_login"] and not st.session_state["is_admin"]:
-    with st.sidebar: # Using sidebar for the password field keeps the main UI clean
+    with st.sidebar:
         pwd = st.text_input("Admin Password", type="password")
-        if pwd == "28HeritageHill": # 
+        if pwd == "28HeritageHill":
             st.session_state["is_admin"] = True
             st.session_state["show_login"] = False
             st.rerun()
 
+# --- 6. ALL HELPER FUNCTIONS ---
 
 def draw_baseball_field():
     shapes = []
-    
-    # 1. Infield Diamond (90ft baselines)
-    shapes.append(dict(
-        type="path", 
-        path="M 0 0 L 63.64 63.64 L 0 127.28 L -63.64 63.64 Z", 
-        line=dict(color="brown", width=2), 
-        fillcolor="rgba(139, 69, 19, 0.2)",
-        layer="below"
-    ))
-    
-    # 2. FOUL LINES (White lines extending to 330ft)
-    # Right Field Line (x=y)
-    shapes.append(dict(
-        type="line", x0=0, y0=0, x1=233.3, y1=233.3, 
-        line=dict(color="white", width=3), 
-        layer="below"
-    )) 
-    # Left Field Line (x=-y)
-    shapes.append(dict(
-        type="line", x0=0, y0=0, x1=-233.3, y1=233.3, 
-        line=dict(color="white", width=3), 
-        layer="below"
-    )) 
-    
-    # 3. Outfield Wall (400ft Arc)
+    shapes.append(dict(type="path", path="M 0 0 L 63.64 63.64 L 0 127.28 L -63.64 63.64 Z", line=dict(color="brown", width=2), fillcolor="rgba(139, 69, 19, 0.2)", layer="below"))
+    shapes.append(dict(type="line", x0=0, y0=0, x1=233.3, y1=233.3, line=dict(color="white", width=3), layer="below"))
+    shapes.append(dict(type="line", x0=0, y0=0, x1=-233.3, y1=233.3, line=dict(color="white", width=3), layer="below"))
     theta = np.linspace(-np.pi/4, np.pi/4, 100)
-    fence_x = 400 * np.sin(theta)
-    fence_y = 400 * np.cos(theta)
+    fence_x, fence_y = 400 * np.sin(theta), 400 * np.cos(theta)
     path = f"M {fence_x[0]} {fence_y[0]}"
-    for x, y in zip(fence_x[1:], fence_y[1:]):
-        path += f" L {x} {y}"
-    
-    shapes.append(dict(
-        type="path", path=path, 
-        line=dict(color="black", width=4), 
-        layer="below"
-    ))
-
+    for x, y in zip(fence_x[1:], fence_y[1:]): path += f" L {x} {y}"
+    shapes.append(dict(type="path", path=path, line=dict(color="black", width=4), layer="below"))
     return shapes
 
 def plot_trend_lines(df):
     """Plots metric trends over time (Game by Game)"""
-    
-    # 1. Prep Data
     df = df.copy()
-    # Ensure Date is datetime
     df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
     df = df.dropna(subset=['Date'])
     
-    # 2. Filter for significant pitch types (ignore types thrown < 5 times total)
-    type_counts = df['TaggedPitchType'].value_counts()
-    valid_types = type_counts[type_counts >= 5].index.tolist()
+    valid_types = df['TaggedPitchType'].value_counts()[lambda x: x >= 5].index.tolist()
     df = df[df['TaggedPitchType'].isin(valid_types)]
     
-    # 3. Group by Date
     daily = df.groupby(['Date', 'TaggedPitchType']).agg({
-        'RelSpeed': 'mean',
-        'SpinRate': 'mean',
-        'InducedVertBreak': 'mean',
-        'HorzBreak': 'mean'
-    }).reset_index()
+        'RelSpeed': 'mean', 'SpinRate': 'mean', 'InducedVertBreak': 'mean', 'HorzBreak': 'mean'
+    }).reset_index().sort_values('Date')
     
-    # Sort by date
-    daily = daily.sort_values('Date')
-    
-    # 4. Define Color Palette (Consistent with other tabs)
-    pitch_colors = {
-        'Fastball': 'dodgerblue', 'Sinker': 'gold', 'Cutter': 'orange',
-        'Curveball': 'red', 'Slider': 'forestgreen', 'Changeup': 'darkviolet',
-        'Splitter': 'purple', 'Knuckleball': 'black'
-    }
-    
-    # 5. Create 4 Sub-Tabs for the Metrics
     t1, t2, t3, t4 = st.tabs(["Velocity", "Spin Rate", "Vertical Break", "Horizontal Break"])
     
     def create_trend_chart(data, y_col, title, y_label):
-        fig = px.line(
-            data, x='Date', y=y_col, color='TaggedPitchType',
-            title=title, markers=True,
-            color_discrete_map=pitch_colors,
-            labels={y_col: y_label, 'Date': 'Date'}
-        )
+        fig = px.line(data, x='Date', y=y_col, color='TaggedPitchType', title=title, markers=True, color_discrete_map=PITCH_PALETTE, labels={y_col: y_label, 'Date': 'Date'})
         fig.update_layout(height=450, plot_bgcolor='white', hovermode="x unified")
         fig.update_traces(line=dict(width=3), marker=dict(size=8))
-        fig.update_xaxes(showgrid=True, gridcolor='whitesmoke')
-        fig.update_yaxes(showgrid=True, gridcolor='whitesmoke')
+        fig.update_xaxes(showgrid=True, gridcolor='whitesmoke'); fig.update_yaxes(showgrid=True, gridcolor='whitesmoke')
         return fig
     
-    with t1:
-        st.plotly_chart(create_trend_chart(daily, 'RelSpeed', "Average Velocity Trend", "Velocity (MPH)"), use_container_width=True)
-        
-    with t2:
-        st.plotly_chart(create_trend_chart(daily, 'SpinRate', "Average Spin Rate Trend", "Spin Rate (RPM)"), use_container_width=True)
-        
-    with t3:
-        st.plotly_chart(create_trend_chart(daily, 'InducedVertBreak', "Vertical Break (IVB) Trend", "IVB (Inches)"), use_container_width=True)
-
-    with t4:
-        st.plotly_chart(create_trend_chart(daily, 'HorzBreak', "Horizontal Break Trend", "Horizontal Break (Inches)"), use_container_width=True)
+    with t1: st.plotly_chart(create_trend_chart(daily, 'RelSpeed', "Average Velocity Trend", "Velocity (MPH)"), use_container_width=True)
+    with t2: st.plotly_chart(create_trend_chart(daily, 'SpinRate', "Average Spin Rate Trend", "Spin Rate (RPM)"), use_container_width=True)
+    with t3: st.plotly_chart(create_trend_chart(daily, 'InducedVertBreak', "Vertical Break (IVB) Trend", "IVB (Inches)"), use_container_width=True)
+    with t4: st.plotly_chart(create_trend_chart(daily, 'HorzBreak', "Horizontal Break Trend", "Horizontal Break (Inches)"), use_container_width=True)
 
 def calc_zone_whiff_and_chase(df):
-    # Use SzTop/SzBot if available, else constants
-    ZONE_LEFT = -0.7083
-    ZONE_RIGHT = 0.7083
-    ZONE_TOP = 3.5
-    ZONE_BOT = 1.5
-
-    # Ensure numeric types for location columns
     df = df.copy()
-    df['PlateLocSide'] = pd.to_numeric(df['PlateLocSide'], errors='coerce')
-    df['PlateLocHeight'] = pd.to_numeric(df['PlateLocHeight'], errors='coerce')
-    if 'SzTop' in df.columns:
-        df['SzTop'] = pd.to_numeric(df['SzTop'], errors='coerce')
-    if 'SzBot' in df.columns:
-        df['SzBot'] = pd.to_numeric(df['SzBot'], errors='coerce')
-
-    has_sz = 'SzTop' in df.columns and 'SzBot' in df.columns
-    if has_sz:
-        in_zone = (
-            (df['PlateLocSide'] >= ZONE_LEFT) & (df['PlateLocSide'] <= ZONE_RIGHT) &
-            (df['PlateLocHeight'] <= df['SzTop']) & (df['PlateLocHeight'] >= df['SzBot'])
-        )
-    else:
-        in_zone = (
-            (df['PlateLocSide'] >= ZONE_LEFT) & (df['PlateLocSide'] <= ZONE_RIGHT) &
-            (df['PlateLocHeight'] <= ZONE_TOP) & (df['PlateLocHeight'] >= ZONE_BOT)
-        )
-    out_zone = ~in_zone
-
-    # Swings: StrikeSwinging, Foul, InPlay (case-insensitive)
+    for c in ['PlateLocSide', 'PlateLocHeight', 'SzTop', 'SzBot']:
+        if c in df.columns: df[c] = pd.to_numeric(df[c], errors='coerce')
+    
+    in_zone = (df['PlateLocSide'].between(-0.7083, 0.7083)) & (df['PlateLocHeight'].between(df.get('SzBot', 1.5), df.get('SzTop', 3.5)))
     swings = df['PitchCall'].str.lower().isin(['strikeswinging', 'foul', 'inplay'])
     whiffs = df['PitchCall'].str.lower() == 'strikeswinging'
-
-    # Zone Whiff%
-    zone_swings = swings & in_zone
-    zone_whiffs = whiffs & in_zone
-    zone_whiff_pct = zone_whiffs.sum() / zone_swings.sum() * 100 if zone_swings.sum() > 0 else 0.0
-
-    # Chase%
-    outzone_swings = swings & out_zone
-    outzone_pitches = out_zone
-    chase_pct = outzone_swings.sum() / outzone_pitches.sum() * 100 if outzone_pitches.sum() > 0 else 0.0
-
+    
+    z_swing = (swings & in_zone).sum()
+    zone_whiff_pct = ((whiffs & in_zone).sum() / z_swing * 100) if z_swing > 0 else 0.0
+    
+    o_pitch = (~in_zone).sum()
+    chase_pct = ((swings & ~in_zone).sum() / o_pitch * 100) if o_pitch > 0 else 0.0
     return round(zone_whiff_pct, 1), round(chase_pct, 1)
 
 def draw_tendency_heatmap(df):
-    import plotly.graph_objects as go
-    import numpy as np
-
-    # Clean data just for this visual
     df = df.copy()
-    df['Distance'] = pd.to_numeric(df['Distance'], errors='coerce')
-    df['Direction'] = pd.to_numeric(df['Direction'], errors='coerce')
+    for c in ['Distance', 'Direction']: df[c] = pd.to_numeric(df[c], errors='coerce')
     
-    # Filter for valid balls in play
-    valid_mask = (
-        df['PlayResult'].isin(['Single', 'Double', 'Triple', 'HomeRun', 'Out', 'Error', 'FieldersChoice']) &
-        (df['Distance'].notnull()) & 
-        (df['Direction'].notnull())
-    )
+    valid_mask = df['PlayResult'].isin(['Single', 'Double', 'Triple', 'HomeRun', 'Out', 'Error', 'FieldersChoice']) & df['Distance'].notnull() & df['Direction'].notnull()
     df = df[valid_mask]
-    total_balls = len(df)
-    
-    if total_balls == 0:
-        st.warning("Not enough data for Heatmap.")
-        return
+    total = len(df)
+    if total == 0:
+        st.warning("Not enough data for Heatmap."); return
 
-    # Define 6 Zones
     zones = {
-        'L_IN':  {'d_min': 0, 'd_max': 220, 'a_min': -45, 'a_max': -15, 'label': 'Pull (In)'},
-        'C_IN':  {'d_min': 0, 'd_max': 220, 'a_min': -15, 'a_max': 15,  'label': 'Center (In)'},
-        'R_IN':  {'d_min': 0, 'd_max': 220, 'a_min': 15,  'a_max': 45,  'label': 'Oppo (In)'},
+        'L_IN': {'d_min': 0, 'd_max': 220, 'a_min': -45, 'a_max': -15, 'label': 'Pull (In)'},
+        'C_IN': {'d_min': 0, 'd_max': 220, 'a_min': -15, 'a_max': 15, 'label': 'Center (In)'},
+        'R_IN': {'d_min': 0, 'd_max': 220, 'a_min': 15, 'a_max': 45, 'label': 'Oppo (In)'},
         'L_OUT': {'d_min': 220, 'd_max': 400, 'a_min': -45, 'a_max': -15, 'label': 'Pull (Out)'},
-        'C_OUT': {'d_min': 220, 'd_max': 400, 'a_min': -15, 'a_max': 15,  'label': 'Center (Out)'},
-        'R_OUT': {'d_min': 220, 'd_max': 400, 'a_min': 15,  'a_max': 45,  'label': 'Oppo (Out)'},
+        'C_OUT': {'d_min': 220, 'd_max': 400, 'a_min': -15, 'a_max': 15, 'label': 'Center (Out)'},
+        'R_OUT': {'d_min': 220, 'd_max': 400, 'a_min': 15, 'a_max': 45, 'label': 'Oppo (Out)'}
     }
     
-    # Calculate Percentages
-    results = {}
+    fig = go.Figure()
     max_pct = 0
-    for key, z in zones.items():
-        count = len(df[
-            (df['Distance'] >= z['d_min']) & (df['Distance'] < z['d_max']) &
-            (df['Direction'] >= z['a_min']) & (df['Direction'] < z['a_max'])
-        ])
-        pct = count / total_balls if total_balls > 0 else 0
-        results[key] = pct
+    results = {}
+    for k, z in zones.items():
+        count = len(df[(df['Distance'].between(z['d_min'], z['d_max'])) & (df['Direction'].between(z['a_min'], z['a_max']))])
+        pct = count / total
+        results[k] = pct
         if pct > max_pct: max_pct = pct
 
-    # Build Shapes
-    fig = go.Figure()
-    
-    for key, z in zones.items():
-        pct = results[key]
-        
-        # Geometry for Arcs
+    for k, z in zones.items():
+        pct = results[k]
         thetas = np.linspace(z['a_min'], z['a_max'], 20)
-        x_outer = z['d_max'] * np.sin(np.deg2rad(thetas))
-        y_outer = z['d_max'] * np.cos(np.deg2rad(thetas))
-        x_inner = z['d_min'] * np.sin(np.deg2rad(thetas[::-1]))
-        y_inner = z['d_min'] * np.cos(np.deg2rad(thetas[::-1]))
-        x = np.concatenate([x_outer, x_inner])
-        y = np.concatenate([y_outer, y_inner])
+        r_outer, r_inner = z['d_max'], z['d_min']
+        x = np.concatenate([r_outer * np.sin(np.deg2rad(thetas)), r_inner * np.sin(np.deg2rad(thetas[::-1]))])
+        y = np.concatenate([r_outer * np.cos(np.deg2rad(thetas)), r_inner * np.cos(np.deg2rad(thetas[::-1]))])
         
-        # Color Scale (White -> Red)
         intensity = pct / max_pct if max_pct > 0 else 0
-        gb = int(255 * (1 - intensity)) 
-        color_hex = f'rgb(255, {gb}, {gb})'
+        gb = int(255 * (1 - intensity))
+        fig.add_trace(go.Scatter(x=x, y=y, fill="toself", fillcolor=f'rgb(255, {gb}, {gb})', line=dict(color="black", width=1), showlegend=False, hoverinfo='text', text=f"{z['label']}: {pct:.1%}"))
         
-        # Add Wedge
-        fig.add_trace(go.Scatter(
-            x=x, y=y, fill="toself", fillcolor=color_hex, 
-            line=dict(color="black", width=1), mode='lines', 
-            hoverinfo='text', text=f"{z['label']}: {pct:.1%}", showlegend=False
-        ))
-        
-        # Add Label (Centroid)
-        mid_theta = (z['a_min'] + z['a_max']) / 2
-        mid_r = (z['d_min'] + z['d_max']) / 2
+        mid_theta, mid_r = (z['a_min'] + z['a_max']) / 2, (z['d_min'] + z['d_max']) / 2
         if z['d_min'] == 0: mid_r = z['d_max'] * 0.6
-        
-        fig.add_trace(go.Scatter(
-            x=[mid_r * np.sin(np.deg2rad(mid_theta))], 
-            y=[mid_r * np.cos(np.deg2rad(mid_theta))],
-            mode='text', text=[f"{pct:.0%}"],
-            textfont=dict(size=14, color='black', weight='bold'),
-            showlegend=False, hoverinfo='skip'
-        ))
+        fig.add_trace(go.Scatter(x=[mid_r * np.sin(np.deg2rad(mid_theta))], y=[mid_r * np.cos(np.deg2rad(mid_theta))], mode='text', text=[f"{pct:.0%}"], textfont=dict(size=14, color='black', weight='bold'), showlegend=False))
 
-    # Context Lines (Foul Lines)
     fig.add_shape(type="line", x0=0, y0=0, x1=282, y1=282, line=dict(color="black", width=2))
     fig.add_shape(type="line", x0=0, y0=0, x1=-282, y1=282, line=dict(color="black", width=2))
-
-    fig.update_layout(
-        title=dict(text="Hit Distribution %", x=0.5),
-        width=400, height=400,
-        xaxis=dict(visible=False, range=[-300, 300], scaleanchor="y"),
-        yaxis=dict(visible=False, range=[-20, 420]),
-        plot_bgcolor='white', margin=dict(l=10, r=10, t=40, b=10)
-    )
+    fig.update_layout(title=dict(text="Hit Distribution %", x=0.5), width=400, height=400, xaxis=dict(visible=False, range=[-300, 300], scaleanchor="y"), yaxis=dict(visible=False, range=[-20, 420]), plot_bgcolor='white', margin=dict(l=10, r=10, t=40, b=10))
     st.plotly_chart(fig, use_container_width=True)
 
 def calc_pitcher_ab_stats(df):
-    # 1. Standardize columns to avoid case sensitivity issues
     df = df.copy()
-    df['PlayResult'] = df['PlayResult'].fillna('Undefined').astype(str).str.lower().str.strip()
-    df['KorBB'] = df['KorBB'].fillna('Undefined').astype(str).str.lower().str.strip()
+    for c in ['PlayResult', 'KorBB']: df[c] = df[c].fillna('Undefined').astype(str).str.lower().str.strip()
     
-    # 2. Define Outcomes
-    hits_list = ['single', 'double', 'triple', 'homerun', 'home run']
+    hits = ['single', 'double', 'triple', 'homerun', 'home run']
+    ab_res = hits + ['out', 'error', 'fielderschoice', 'fielders choice']
+    ab_mask = (df['PlayResult'].isin(ab_res) | (df['KorBB'] == 'strikeout')) & ~df['PlayResult'].str.contains('sacrifice')
+    ab_df = df[ab_mask]
     
-    # At Bats include: Hits, Outs, Errors, Fielders Choice
-    # CRITICAL: We DO NOT include Walks, HBP, or Sacrifices here
-    at_bat_results = hits_list + ['out', 'error', 'fielderschoice', 'fielders choice']
+    ab = len(ab_df)
+    h = ab_df['PlayResult'].isin(hits).sum()
+    bb = (df['KorBB'] == 'walk').sum()
+    k = (df['KorBB'] == 'strikeout').sum()
     
-    # 3. Filter for At Bats
-    # Condition A: PlayResult is a valid At-bat outcome
-    # Condition B: It is a Strikeout (Check KorBB because PlayResult might be undefined)
-    ab_mask = (
-        df['PlayResult'].isin(at_bat_results) | 
-        (df['KorBB'] == 'strikeout')
-    )
+    tb = (ab_df['PlayResult'] == 'single').sum() + (ab_df['PlayResult'] == 'double').sum()*2 + (ab_df['PlayResult'] == 'triple').sum()*3 + ab_df['PlayResult'].isin(['homerun', 'home run']).sum()*4
+    avg = h/ab if ab>0 else 0
+    slg = tb/ab if ab>0 else 0
     
-    # Exclude Sacrifices if they appear in PlayResult
-    sac_mask = df['PlayResult'].str.contains('sacrifice')
-    
-    # Final AB DataFrame
-    ab_df = df[ab_mask & ~sac_mask]
-    
-    # 4. Calculate Stats
-    ab_count = len(ab_df)
-    
-    # Hits calculation (Must verify against the CLEANED column)
-    hits_count = ab_df['PlayResult'].isin(hits_list).sum()
-    
-    # Specific hit types
-    singles = (ab_df['PlayResult'] == 'single').sum()
-    doubles = (ab_df['PlayResult'] == 'double').sum()
-    triples = (ab_df['PlayResult'] == 'triple').sum()
-    hrs = (ab_df['PlayResult'].isin(['homerun', 'home run'])).sum()
-    
-    # Strikeouts & Walks (Calculated from the original DF, not just ABs, to catch Walks)
-    walks = (df['KorBB'] == 'walk').sum()
-    strikeouts = (df['KorBB'] == 'strikeout').sum()
-    
-    tb = singles + (2 * doubles) + (3 * triples) + (4 * hrs)
-
-    avg = (hits_count / ab_count) if ab_count > 0 else 0.0
-    slg = (tb / ab_count) if ab_count > 0 else 0.0
-
-    return {
-        'AB': int(ab_count),
-        'H': int(hits_count),
-        'AVG': round(avg, 3),
-        'SLG': round(slg, 3),
-        'BB': int(walks),
-        'K': int(strikeouts)
-    }
-
-def overall_stats(df):
-    df = df.copy()
-    
-    # 1. Standardize text columns
-    df['PlayResult'] = df['PlayResult'].fillna('Undefined').astype(str).str.lower().str.strip()
-    df['KorBB'] = df['KorBB'].fillna('Undefined').astype(str).str.lower().str.strip()
-    df['PitchCall'] = df['PitchCall'].fillna('Undefined').astype(str).str.lower().str.strip()
-    
-    # 2. Define Logic for At Bats
-    hits_list = ['single', 'double', 'triple', 'homerun', 'home run']
-    ab_outcomes = hits_list + ['out', 'error', 'fielderschoice', 'fielders choice', 'fielderschoic']
-    
-    is_ab_result = df['PlayResult'].isin(ab_outcomes)
-    is_strikeout = df['KorBB'] == 'strikeout'
-    is_sac = df['PlayResult'].str.contains('sacrifice')
-    
-    ab_df = df[(is_ab_result | is_strikeout) & ~is_sac]
-    ab_count = len(ab_df)
-    
-    # 3. Calculate Hits and Total Bases
-    hits_count = ab_df['PlayResult'].isin(hits_list).sum()
-    singles = (ab_df['PlayResult'] == 'single').sum()
-    doubles = (ab_df['PlayResult'] == 'double').sum()
-    triples = (ab_df['PlayResult'] == 'triple').sum()
-    hrs = (ab_df['PlayResult'].isin(['homerun', 'home run'])).sum()
-    tb = singles + (2 * doubles) + (3 * triples) + (4 * hrs)
-    
-    # 4. Standard Metrics
-    ba = (hits_count / ab_count) if ab_count > 0 else 0.0
-    slg = (tb / ab_count) if ab_count > 0 else 0.0
-    
-    # 5. Quality Metrics (Numeric conversion safety)
-    whiff_pct = (df['PitchCall'] == 'strikeswinging').mean() * 100 if len(df) > 0 else 0.0
-    hh_pct = (pd.to_numeric(df['ExitSpeed'], errors='coerce') > 95).mean() * 100 if len(df) > 0 else 0.0
-    gb_pct = (pd.to_numeric(df['Angle'], errors='coerce') < 8).mean() * 100 if len(df) > 0 else 0.0
-
-    in_zone = (pd.to_numeric(df['PlateLocSide'], errors='coerce').between(-0.83, 0.83)) & \
-              (pd.to_numeric(df['PlateLocHeight'], errors='coerce').between(1.5, 3.5))
-    zone_pct = (in_zone.sum() / len(df)) * 100 if len(df) > 0 else 0.0
-
-    # 6. Advanced Stats (Mean Calculation)
-    rv = pd.to_numeric(df['run_value'], errors='coerce').mean()
-    woba = pd.to_numeric(df['wOBA_result'], errors='coerce').mean()
-    xwoba = pd.to_numeric(df['xwOBA_result'], errors='coerce').mean()
-
-    # 7. Zone Stats
-    zone_whiff, chase = calc_zone_whiff_and_chase(df)
-    
-    return {
-        'Pitch': 'Overall',
-        '#': len(df),
-        'Usage': 100.0,
-        'AVG': round(ba, 3),
-        'SLG': round(slg, 3),
-        'Zone%': round(zone_pct, 1),
-        'Whiff%': round(whiff_pct, 1),
-        'HH%': round(hh_pct, 1),
-        'GB%': round(gb_pct, 1),
-        'Zone Whiff%': round(zone_whiff, 1),
-        'Chase%': round(chase, 1),          
-        'run_value': round(rv, 2),
-        'wOBA': round(woba, 3),
-        'xwOBA': round(xwoba, 3)
-    }
-
-def pitch_type_stats(df):
-    results = []
-    total_pitches = len(df)
-    
-    # Standardize columns on the main dataframe once
-    df_clean = df.copy()
-    df_clean['PlayResult'] = df_clean['PlayResult'].fillna('Undefined').astype(str).str.lower().str.strip()
-    df_clean['KorBB'] = df_clean['KorBB'].fillna('Undefined').astype(str).str.lower().str.strip()
-    df_clean['PitchCall'] = df_clean['PitchCall'].fillna('Undefined').astype(str).str.lower().str.strip()
-    df_clean['PlateLocSide'] = pd.to_numeric(df_clean['PlateLocSide'], errors='coerce')
-    df_clean['PlateLocHeight'] = pd.to_numeric(df_clean['PlateLocHeight'], errors='coerce')
-    if 'SzTop' in df_clean.columns:
-        df_clean['SzTop'] = pd.to_numeric(df_clean['SzTop'], errors='coerce')
-    if 'SzBot' in df_clean.columns:
-        df_clean['SzBot'] = pd.to_numeric(df_clean['SzBot'], errors='coerce')
-
-    for pitch, group in df_clean.groupby('TaggedPitchType'):
-        # --- AB FILTERING LOGIC ---
-        hits_list = ['single', 'double', 'triple', 'homerun', 'home run']
-        ab_outcomes = hits_list + ['out', 'error', 'fielderschoice', 'fielders choice', 'fielderschoic']
-
-        # AB Mask: (Valid Result OR Strikeout) AND (Not a Sacrifice)
-        is_ab_result = group['PlayResult'].isin(ab_outcomes)
-        is_strikeout = group['KorBB'] == 'strikeout'
-        is_sac = group['PlayResult'].str.contains('sacrifice')
-        
-        ab_group = group[(is_ab_result | is_strikeout) & ~is_sac]
-        ab_count = len(ab_group)
-        
-        hits_count = ab_group['PlayResult'].isin(hits_list).sum()
-        singles = (ab_group['PlayResult'] == 'single').sum()
-        doubles = (ab_group['PlayResult'] == 'double').sum()
-        triples = (ab_group['PlayResult'] == 'triple').sum()
-        hrs = (ab_group['PlayResult'].isin(['homerun', 'home run'])).sum()
-        
-        tb = singles + (2 * doubles) + (3 * triples) + (4 * hrs)
-        
-        ba = (hits_count / ab_count) if ab_count > 0 else 0.0
-        slg = (tb / ab_count) if ab_count > 0 else 0.0
-        
-        whiff_pct = (group['PitchCall'] == 'strikeswinging').mean() * 100 if len(group) > 0 else 0.0
-        hard_hit_pct = (pd.to_numeric(group['ExitSpeed'], errors='coerce') > 95).mean() * 100 if len(group) > 0 else 0.0
-        gb_pct = (pd.to_numeric(group['Angle'], errors='coerce') < 10).mean() * 100 if len(group) > 0 else 0.0
-        usage = len(group) / total_pitches * 100 if total_pitches > 0 else 0.0
-
-        in_zone = (group['PlateLocSide'].between(-0.83, 0.83)) & \
-                  (group['PlateLocHeight'].between(1.5, 3.5))
-        zone_pct = (in_zone.sum() / len(group)) * 100 if len(group) > 0 else 0.0
-
-        # --- Zone Whiff% and Chase% ---
-        zone_whiff, chase = calc_zone_whiff_and_chase(group)
-
-        # Fix: Only compute mean if column exists
-        if 'run_value' in group.columns:
-            run_value = pd.to_numeric(group['run_value'], errors='coerce').mean()
-        else:
-            run_value = np.nan
-        if 'wOBA_result' in group.columns:
-            woba = pd.to_numeric(group['wOBA_result'], errors='coerce').mean()
-        else:
-            woba = np.nan
-        if 'xwOBA_result' in group.columns:
-            xwoba = pd.to_numeric(group['xwOBA_result'], errors='coerce').mean()
-        else:
-            xwoba = np.nan
-
-        results.append({
-            'Pitch': pitch,
-            '#': len(group),
-            'Usage': round(usage, 1),
-            'AVG': round(ba, 3),
-            'SLG': round(slg, 3),
-            'Zone%': round(zone_pct, 1),
-            'Whiff%': round(whiff_pct, 1),
-            'HH%': round(hard_hit_pct, 1),
-            'GB%': round(gb_pct, 1),
-            'Zone Whiff%': round(zone_whiff, 1),
-            'Chase%': round(chase, 1),
-            'run_value': round(run_value, 1),
-            'wOBA': round(woba, 1),
-            'xwOBA': round(xwoba, 1)
-        })
-        
-    return pd.DataFrame(results)
-
-# Add this function AFTER your data loading functions (around line 120)
-# BEFORE the "if app == 'Home':" line
+    return {'AB': ab, 'H': h, 'AVG': round(avg, 3), 'SLG': round(slg, 3), 'BB': bb, 'K': k}
 
 def get_advanced_metrics(df):
     """Calculate comprehensive batting metrics for any dataframe"""
-    default = {
-        "Pitches": 0, "AVG": 0, "OBP": 0, "SLG": 0, "OPS": 0, "wOBA": 0, "xwOBA": 0,
-        "Avg EV": 0, "Avg LA": 0, "Contact%": 0, "Swing%": 0, "SwStr%": 0,
-        "Chase%": 0, "Miss%": 0, "1stSwing%": 0, "K%": 0, "BB%": 0,
-        "90th EV": 0, "HardHit%": 0, "HHLD%": 0, "LD%": 0, "GB%": 0, "FB%": 0, "Z-Contact%": 0
-    }
+    default = {"Pitches": 0, "AVG": 0, "OBP": 0, "SLG": 0, "OPS": 0, "wOBA": 0, "xwOBA": 0, "Avg EV": 0, "HardHit%": 0, "Whiff%": 0, "Chase%": 0, "K%": 0, "BB%": 0}
     if df.empty: return default
     
     df = df.copy()
-    for col in ['ExitSpeed', 'Angle', 'PlateLocSide', 'PlateLocHeight', 'wOBA_result', 'xwOBA_result', 'PitchofPA']:
+    for col in ['ExitSpeed', 'Angle', 'PlateLocSide', 'PlateLocHeight', 'wOBA_result', 'xwOBA_result']:
         df[col] = pd.to_numeric(df[col], errors='coerce')
     
-    # Core Definitions
     res = df['PlayResult'].fillna('').str.lower()
     kbb = df['KorBB'].fillna('').str.lower()
     call = df['PitchCall'].fillna('').str.lower()
@@ -737,7 +331,6 @@ def get_advanced_metrics(df):
     misses = call == 'strikeswinging'
     in_zone = (df['PlateLocSide'].abs() <= 0.83) & (df['PlateLocHeight'].between(1.5, 3.5))
     
-    # Slash Line
     hits = res.isin(['single', 'double', 'triple', 'homerun', 'home run']).sum()
     walks = (kbb == 'walk').sum()
     hbp = (call == 'hitbypitch').sum()
@@ -748,39 +341,106 @@ def get_advanced_metrics(df):
     obp = (hits + walks + hbp) / pa_count if pa_count > 0 else 0
     tb = (res=='single').sum() + (res=='double').sum()*2 + (res=='triple').sum()*3 + res.isin(['homerun','home run']).sum()*4
     slg = tb / abs_count if abs_count > 0 else 0
-
-    # HHLD Logic
-    batted_balls = df.dropna(subset=['ExitSpeed', 'Angle'])
-    hhld_count = ((batted_balls['ExitSpeed'] >= 95) & (batted_balls['Angle'].between(8, 32))).sum()
-    hhld_pct = (hhld_count / len(batted_balls) * 100) if len(batted_balls) > 0 else 0
-
+    
+    hh = (df['ExitSpeed'].dropna() >= 95).mean() * 100
+    
     return {
         "Pitches": len(df), "AVG": avg, "OBP": obp, "SLG": slg, "OPS": obp + slg,
         "wOBA": df['wOBA_result'].mean(), "xwOBA": df['xwOBA_result'].mean(),
-        "Avg EV": df['ExitSpeed'].mean(), "Avg LA": df['Angle'].mean(),
+        "Avg EV": df['ExitSpeed'].mean(), 
         "Contact%": ((swings & ~misses).sum() / swings.sum() * 100) if swings.sum() > 0 else 0,
         "Swing%": (swings.sum() / len(df) * 100) if len(df) > 0 else 0,
-        "SwStr%": (misses.sum() / len(df) * 100) if len(df) > 0 else 0,
         "Chase%": ((swings & ~in_zone).sum() / (~in_zone).sum() * 100) if (~in_zone).sum() > 0 else 0,
         "Miss%": (misses.sum() / swings.sum() * 100) if swings.sum() > 0 else 0,
-        "1stSwing%": (df[df['PitchofPA'] == 1]['PitchCall'].str.lower().isin(['strikeswinging', 'foul', 'inplay']).sum() / (df['PitchofPA'] == 1).sum() * 100) if (df['PitchofPA'] == 1).sum() > 0 else 0,
         "K%": ((kbb == 'strikeout').sum() / pa_count * 100) if pa_count > 0 else 0,
         "BB%": (walks / pa_count * 100) if pa_count > 0 else 0,
         "90th EV": np.percentile(df['ExitSpeed'].dropna(), 90) if not df['ExitSpeed'].dropna().empty else 0,
-        "HardHit%": (df['ExitSpeed'].dropna() >= 95).mean() * 100,
-        "HHLD%": hhld_pct,
+        "HardHit%": hh,
         "LD%": df['Angle'].dropna().between(10, 25).mean() * 100,
         "GB%": (df['Angle'].dropna() < 10).mean() * 100,
         "FB%": df['Angle'].dropna().between(25, 50).mean() * 100,
-        "Z-Contact%": ((swings & in_zone & ~misses).sum() / (swings & in_zone).sum() * 100) if (swings & in_zone).sum() > 0 else 0
+        "Z-Contact%": ((swings & in_zone & ~misses).sum() / (swings & in_zone).sum() * 100) if (swings & in_zone).sum() > 0 else 0,
+        "HHLD%": ((df['ExitSpeed'] >= 95) & (df['Angle'].between(8, 32))).sum() / len(df.dropna(subset=['ExitSpeed'])) * 100 if len(df.dropna(subset=['ExitSpeed'])) > 0 else 0
     }
 
+def overall_stats(df):
+    m = get_advanced_metrics(df)
+    zone_whiff, chase = calc_zone_whiff_and_chase(df)
+    # Return specific dict for table formatting
+    return {
+        'Pitch': 'Overall', '#': len(df), 'Usage': 100.0,
+        'AVG': round(m['AVG'], 3), 'SLG': round(m['SLG'], 3),
+        'Zone%': 0, # Calc if needed
+        'Whiff%': round(m['Miss%'], 1), 'HH%': round(m['HardHit%'], 1),
+        'GB%': round(m['GB%'], 1), 'Zone Whiff%': round(zone_whiff, 1),
+        'Chase%': round(chase, 1), 'run_value': 0, 
+        'wOBA': round(m['wOBA'], 3), 'xwOBA': round(m['xwOBA'], 3)
+    }
+
+def pitch_type_stats(df):
+    results = []
+    total = len(df)
+    for pitch, group in df.groupby('TaggedPitchType'):
+        m = get_advanced_metrics(group)
+        z_whiff, chase = calc_zone_whiff_and_chase(group)
+        rv = pd.to_numeric(group['run_value'], errors='coerce').mean()
+        usage = len(group) / total * 100
+        
+        results.append({
+            'Pitch': pitch, '#': len(group), 'Usage': round(usage, 1),
+            'AVG': round(m['AVG'], 3), 'SLG': round(m['SLG'], 3),
+            'Zone%': 0, 'Whiff%': round(m['Miss%'], 1),
+            'HH%': round(m['HardHit%'], 1), 'GB%': round(m['GB%'], 1),
+            'Zone Whiff%': round(z_whiff, 1), 'Chase%': round(chase, 1),
+            'run_value': round(rv, 1), 'wOBA': round(m['wOBA'], 1), 'xwOBA': round(m['xwOBA'], 1)
+        })
+    return pd.DataFrame(results)
+
+def draw_performance_grid(data, hand):
+    """Draws the 2x2 strike zone grid with stats."""
+    hand_col = 'PitcherThrows' if 'PitcherThrows' in data.columns else 'PitcherHand'
+    df = data[data[hand_col] == hand].copy() if hand_col in data.columns else data.copy()
+
+    df['PlateLocSide'] = pd.to_numeric(df['PlateLocSide'], errors='coerce')
+    df['PlateLocHeight'] = pd.to_numeric(df['PlateLocHeight'], errors='coerce')
+    df['Zone'] = 'Outside'
+    df.loc[(df['PlateLocSide'] < 0) & (df['PlateLocHeight'] > 2.5), 'Zone'] = 'Upper Left'
+    df.loc[(df['PlateLocSide'] >= 0) & (df['PlateLocHeight'] > 2.5), 'Zone'] = 'Upper Right'
+    df.loc[(df['PlateLocSide'] < 0) & (df['PlateLocHeight'] <= 2.5), 'Zone'] = 'Lower Left'
+    df.loc[(df['PlateLocSide'] >= 0) & (df['PlateLocHeight'] <= 2.5), 'Zone'] = 'Lower Right'
+
+    fig_zone = go.Figure()
+    quads = [[[-0.83, 2.5, 0, 3.5], 'Upper Left'], [[0, 2.5, 0.83, 3.5], 'Upper Right'],
+             [[-0.83, 1.5, 0, 2.5], 'Lower Left'], [[0, 1.5, 0.83, 2.5], 'Lower Right']]
+
+    for coords, name in quads:
+        z_df = df[df['Zone'] == name]
+        if not z_df.empty:
+            m = get_advanced_metrics(z_df)
+            bg_color = "rgba(34, 139, 34, 0.9)" if m['OPS'] >= 0.800 else "rgba(178, 34, 34, 0.9)"
+            fig_zone.add_shape(type="rect", x0=coords[0], y0=coords[1], x1=coords[2], y1=coords[3],
+                line=dict(color="white", width=1), fillcolor=bg_color, layer="below")
+            fig_zone.add_trace(go.Scatter(
+                x=[(coords[0]+coords[2])/2], y=[(coords[1]+coords[3])/2],
+                text=f"OPS: {m['OPS']:.3f}<br>AVG: {m['AVG']:.3f}<br>EV: {m['Avg EV']:.1f}",
+                mode="text", textfont=dict(size=14, color="white", weight="bold"), showlegend=False
+            ))
+        else:
+            fig_zone.add_shape(type="rect", x0=coords[0], y0=coords[1], x1=coords[2], y1=coords[3],
+                line=dict(color="gray", width=1), fillcolor="rgba(100, 100, 100, 0.3)", layer="below")
+
+    fig_zone.add_shape(type="path", path="M -0.4 0 L 0.4 0 L 0.4 0.2 L 0 0.4 L -0.4 0.2 Z",
+                  line=dict(color="white", width=2), fillcolor="gray", layer="below")
+    fig_zone.update_layout(
+        title=dict(text=f"vs {hand}HP", x=0.5, font=dict(size=16, color="white")),
+        xaxis=dict(range=[-1.5, 1.5], visible=False), yaxis=dict(range=[-0.5, 4.0], visible=False), 
+        width=350, height=450, margin=dict(l=10, r=10, t=40, b=10), 
+        plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)'
+    )
+    return fig_zone
 
 
 
-# Replace lines 153-175 (your Home page and app selection) with this:
-
-# This creates the variable 'app' so the rest of your code works
 app = st.selectbox("Select App", ["Home", "NCAA Hitter", "NCAA Pitcher", "Holy Cross Hitter", "Holy Cross Pitcher"])
 
 if app == "Home":
@@ -2430,40 +2090,34 @@ elif app == "Holy Cross Pitcher":
     # ... The rest of Tabs 2-6 remain exactly the same ...
 
     with tab2:
-        # --- 1. FILTERS (HC SPECIFIC) ---
-        col1, col2 = st.columns([1, 2])
-        with col1:
-            # HARDCODED TEAM for this section
-            p_team = "College of the Holy Cross"
-            st.info(f"Team: {p_team}")
-        
-        with col2:
-            # Date Filter
-            date_range = st.date_input("Date Range", [pd.to_datetime("2025-01-01"), pd.to_datetime("2025-12-31")], key="hc_p_date")
+        # --- 1. FILTERS (Date Range Only) ---
+        c1, c2 = st.columns([1, 3]) 
+        with c1:
+            date_range = st.date_input("Date Range", [pd.to_datetime("2025-01-01"), pd.to_datetime("2025-12-31")], key="hc_p_date_tab2")
 
-        # Select Pitcher (Loader uses the hardcoded team)
-        pitchers = load_players_for_team(p_team, "pitcher")
-        pitcher = st.selectbox("Select Holy Cross Pitcher", pitchers, key="hc_pitcher_select")
-
-        # --- 2. DATA LOADING ---
-        if pitcher:
-            # Load Data (Optimized)
-            p_data = load_player_data(pitcher, p_team, "pitcher")
-            # --- FIX: FORCE NUMERIC TYPES ---
-            # This converts "92.5" (string) to 92.5 (number) so .mean() works
-            numeric_cols = ['RelSpeed', 'SpinRate', 'InducedVertBreak', 'HorzBreak']
-            for col in numeric_cols:
-                if col in p_data.columns:
-                    p_data[col] = pd.to_numeric(p_data[col], errors='coerce')
+        # --- 2. DATA PROCESSING ---
+        # Use 'data' from the Sidebar selection
+        if not data.empty:
+            filtered_data = data.copy()
             
-            # Filter by Date
-            if not p_data.empty:
-                p_data['Date'] = pd.to_datetime(p_data['Date'])
-                if len(date_range) == 2:
-                    p_data = p_data[(p_data['Date'] >= pd.to_datetime(date_range[0])) & 
-                                    (p_data['Date'] <= pd.to_datetime(date_range[1]))]
+            # CRITICAL: Force numeric types for charts
+            numeric_cols = ['RelSpeed', 'SpinRate', 'InducedVertBreak', 'HorzBreak', 'ExitSpeed', 'PlateLocSide', 'PlateLocHeight']
+            for col in numeric_cols:
+                if col in filtered_data.columns:
+                    filtered_data[col] = pd.to_numeric(filtered_data[col], errors='coerce')
+            
+            filtered_data['Date'] = pd.to_datetime(filtered_data['Date'])
+            
+            # Apply Date Filter
+            if len(date_range) == 2:
+                filtered_data = filtered_data[(filtered_data['Date'] >= pd.to_datetime(date_range[0])) & 
+                                              (filtered_data['Date'] <= pd.to_datetime(date_range[1]))]
 
-                # --- 3. HELPER: SAFE FIXING WIDGET ---
+            if filtered_data.empty:
+                st.warning("No data found for this date range.")
+            else:
+                # --- HELPER: SAFE FIXING WIDGET ---
+                # This stays local because it interacts with specific session state keys
                 def show_admin_fix_widget(selected_data, chart_name):
                     if not st.session_state.get("is_admin", False):
                         return
@@ -2472,7 +2126,7 @@ elif app == "Holy Cross Pitcher":
                         pts = selected_data["selection"]["points"]
                         if not pts: return
 
-                        # Extract the SAFE 'master_index'
+                        # Safe Index Extraction
                         safe_indices = []
                         for p in pts:
                             try:
@@ -2486,167 +2140,112 @@ elif app == "Holy Cross Pitcher":
                         safe_indices = [int(i) for i in safe_indices if i is not None]
                         
                         if safe_indices:
-                            st.info(f"🔍 Debug: You selected {len(safe_indices)} pitches. IDs: {safe_indices[:5]}...")
+                            st.info(f"🔍 Selected {len(safe_indices)} pitches.")
                             
-                            col1, col2 = st.columns([2, 1])
-                            with col1:
+                            c1, c2 = st.columns([2, 1])
+                            with c1:
                                 new_tag = st.selectbox(
                                     f"Change to:", 
-                                    ["Fastball", "Sinker", "Cutter", "Slider", "Sweeper", "Curveball", "Knuckle Curve", "Changeup", "Splitter"],
+                                    list(PITCH_PALETTE.keys()), # Uses Global Palette
                                     key=f"fix_{chart_name}"
                                 )
-                            with col2:
+                            with c2:
                                 st.write("") 
                                 if st.button(f"✅ Apply Fix", key=f"btn_{chart_name}"):
                                     try:
-                                        # 1. LOAD MASTER FILE FROM CACHE
                                         path = get_local_data_path()
                                         full_df = pd.read_parquet(path)
-                                        
-                                        # 2. VALIDATE INDICES
                                         valid_indices = [i for i in safe_indices if i in full_df.index]
                                         
                                         if len(valid_indices) == 0:
-                                            st.error("❌ Critical Error: Indices not found.")
+                                            st.error("❌ Error: Indices not found.")
                                             return
                                         
-                                        # 3. UPDATE THE DATA
                                         full_df.loc[valid_indices, 'TaggedPitchType'] = new_tag
-                                        
-                                        # 4. SAVE TEMP COPY
                                         full_df.to_parquet("ncaa_data_2025_fixed.parquet", index=False)
-                                        
-                                        # 5. CLEAR CACHE & RELOAD
                                         st.cache_data.clear()
-                                        st.success(f"✅ Fixed {len(valid_indices)} pitches! Please download the file below.")
-                                        
+                                        st.success(f"✅ Fixed {len(valid_indices)} pitches! Please download below.")
                                     except Exception as e:
                                         st.error(f"❌ Save failed: {e}")
 
-                # --- 4. SUMMARY METRICS ---
-                st.markdown(f"### 📊 Pitching Summary: {pitcher}")
-                
-                summary = p_data.groupby('TaggedPitchType').agg(
-                    Count=('RelSpeed', 'count'),
-                    Avg_Velo=('RelSpeed', 'mean'),
-                    Max_Velo=('RelSpeed', 'max'),
-                    Spin=('SpinRate', 'mean'),
-                    IVB=('InducedVertBreak', 'mean'),
-                    HB=('HorzBreak', 'mean'),
-                    Whiff_Pct=('PitchCall', lambda x: (x == 'StrikeSwinging').sum() / (x.isin(['StrikeSwinging', 'InPlay', 'Foul'])).sum() * 100)
-                ).reset_index().round(1)
-                
-                st.dataframe(summary, use_container_width=True, hide_index=True)
-
-                st.divider()
-
-                # --- 5. MOVEMENT PLOT (WITH LASSO) ---
-                st.markdown("### 🎯 Pitch Movement (Lasso to Fix)")
+                # --- 3. MOVEMENT PROFILE (IVB vs HB) ---
+                st.subheader("Interactive Movement Profile (IVB vs HB)")
+                st.caption("Lasso to inspect or fix pitch tags.")
                 
                 fig_mov = px.scatter(
-                    p_data, x="HorzBreak", y="InducedVertBreak", 
+                    filtered_data, x="HorzBreak", y="InducedVertBreak", 
                     color="TaggedPitchType",
+                    color_discrete_map=PITCH_PALETTE, # Uses Global Palette
                     hover_data=["RelSpeed", "SpinRate", "Date"],
-                    title=f"{pitcher} - Movement Profile",
-                    width=800, height=600
+                    width=650, height=650
                 )
                 
-                fig_mov.add_shape(type="line", x0=-25, y0=0, x1=25, y1=0, line=dict(color="gray", width=1, dash="dash"))
-                fig_mov.add_shape(type="line", x0=0, y0=-25, x1=0, y1=25, line=dict(color="gray", width=1, dash="dash"))
+                fig_mov.add_hline(y=0, line_dash="dash", line_color="black")
+                fig_mov.add_vline(x=0, line_dash="dash", line_color="black")
+                
                 fig_mov.update_layout(
                     xaxis_title="Horizontal Break (in)", 
                     yaxis_title="Induced Vertical Break (in)",
-                    xaxis=dict(range=[-25, 25]), 
-                    yaxis=dict(range=[-25, 25]),
+                    xaxis=dict(range=[-30, 30], gridcolor='lightgrey'), 
+                    yaxis=dict(range=[-30, 30], gridcolor='lightgrey', scaleanchor="x", scaleratio=1),
+                    plot_bgcolor='white',
                     dragmode='lasso'
                 )
-                
-                # ADD INDEX TO CUSTOM DATA
-                fig_mov.update_traces(customdata=p_data.index)
+                fig_mov.update_traces(customdata=filtered_data.index)
 
                 selection_mov = st.plotly_chart(
                     fig_mov, 
                     on_select="rerun", 
                     selection_mode=["box", "lasso"],
-                    use_container_width=True,
+                    use_container_width=False,
                     key="hc_mov_scatter"
                 )
-
                 show_admin_fix_widget(selection_mov, "hc_movement_chart")
                 
                 st.divider()
 
-                # --- 6. VELOCITY & SPIN DISTRIBUTIONS ---
-                col_a, col_b = st.columns(2)
-                with col_a:
-                    st.subheader("🚀 Velocity Distribution")
-                    fig_velo = px.histogram(p_data, x="RelSpeed", color="TaggedPitchType", nbins=20, barmode="overlay")
-                    st.plotly_chart(fig_velo, use_container_width=True)
+                # --- 4. VELOCITY vs SPIN RATE ---
+                st.subheader("Velocity vs. Spin Rate")
+                st.caption("Identify misclassified pitches by spin/velo clusters.")
+
+                fig_ss = px.scatter(
+                    filtered_data, x='RelSpeed', y='SpinRate', 
+                    color='TaggedPitchType',
+                    color_discrete_map=PITCH_PALETTE, # Uses Global Palette
+                    labels={'RelSpeed': 'Velocity (MPH)', 'SpinRate': 'Spin Rate (RPM)'},
+                    hover_data=['RelSpeed', 'SpinRate', 'Date'],
+                    width=750, height=500
+                )
                 
-                with col_b:
-                    st.subheader("🔄 Spin Rate Distribution")
-                    fig_spin = px.histogram(p_data, x="SpinRate", color="TaggedPitchType", nbins=20, barmode="overlay")
-                    st.plotly_chart(fig_spin, use_container_width=True)
+                fig_ss.update_layout(
+                    dragmode='lasso', 
+                    plot_bgcolor='white',
+                    xaxis=dict(gridcolor='lightgrey'), 
+                    yaxis=dict(gridcolor='lightgrey')
+                )
+                fig_ss.update_traces(customdata=filtered_data.index, marker=dict(size=8, line=dict(width=1, color='white')))
+
+                selection_ss = st.plotly_chart(
+                    fig_ss, 
+                    on_select="rerun", 
+                    selection_mode=["box", "lasso"],
+                    use_container_width=False,
+                    key="hc_velo_spin_scatter"
+                )
+                show_admin_fix_widget(selection_ss, "hc_velo_spin_chart")
 
                 st.divider()
 
-                # --- 7. PERFORMANCE BY ZONE (DARK MODE FIXED) ---
+                # --- 5. PERFORMANCE BY ZONE ---
                 st.subheader("📍 Performance by Zone")
-                
-                # ... [Use the same Helper functions 'get_advanced_metrics' & 'draw_performance_grid' defined earlier] ...
-                # Since you defined them in the main script scope or inside Tabs, ensure they are accessible.
-                # If they are inside the NCAA section, COPY/PASTE the "draw_performance_grid" function here too.
-                
-                # (For safety, here is the function again to prevent Scope Errors)
-                def draw_performance_grid_hc(data, hand):
-                    hand_col = 'PitcherThrows' if 'PitcherThrows' in data.columns else 'PitcherHand'
-                    df = data[data[hand_col] == hand].copy() if hand_col in data.columns else data.copy()
-                    df['PlateLocSide'] = pd.to_numeric(df['PlateLocSide'], errors='coerce')
-                    df['PlateLocHeight'] = pd.to_numeric(df['PlateLocHeight'], errors='coerce')
-                    
-                    df['Zone'] = 'Outside'
-                    df.loc[(df['PlateLocSide'] < 0) & (df['PlateLocHeight'] > 2.5), 'Zone'] = 'Upper Left'
-                    df.loc[(df['PlateLocSide'] >= 0) & (df['PlateLocHeight'] > 2.5), 'Zone'] = 'Upper Right'
-                    df.loc[(df['PlateLocSide'] < 0) & (df['PlateLocHeight'] <= 2.5), 'Zone'] = 'Lower Left'
-                    df.loc[(df['PlateLocSide'] >= 0) & (df['PlateLocHeight'] <= 2.5), 'Zone'] = 'Lower Right'
-
-                    fig_zone = go.Figure()
-                    quads = [[[-0.83, 2.5, 0, 3.5], 'Upper Left'], [[0, 2.5, 0.83, 3.5], 'Upper Right'],
-                             [[-0.83, 1.5, 0, 2.5], 'Lower Left'], [[0, 1.5, 0.83, 2.5], 'Lower Right']]
-
-                    for coords, name in quads:
-                        z_df = df[df['Zone'] == name]
-                        if not z_df.empty:
-                            m = get_advanced_metrics(z_df)
-                            bg_color = "rgba(34, 139, 34, 0.9)" if m['OPS'] >= 0.800 else "rgba(178, 34, 34, 0.9)"
-                            fig_zone.add_shape(type="rect", x0=coords[0], y0=coords[1], x1=coords[2], y1=coords[3],
-                                line=dict(color="white", width=1), fillcolor=bg_color, layer="below")
-                            fig_zone.add_trace(go.Scatter(
-                                x=[(coords[0]+coords[2])/2], y=[(coords[1]+coords[3])/2],
-                                text=f"OPS: {m['OPS']:.3f}<br>AVG: {m['AVG']:.3f}<br>EV: {m['Avg EV']:.1f}",
-                                mode="text", textfont=dict(size=14, color="white", weight="bold"), showlegend=False
-                            ))
-                        else:
-                            fig_zone.add_shape(type="rect", x0=coords[0], y0=coords[1], x1=coords[2], y1=coords[3],
-                                line=dict(color="gray", width=1), fillcolor="rgba(100, 100, 100, 0.3)", layer="below")
-
-                    fig_zone.add_shape(type="path", path="M -0.4 0 L 0.4 0 L 0.4 0.2 L 0 0.4 L -0.4 0.2 Z",
-                                  line=dict(color="white", width=2), fillcolor="gray", layer="below")
-                    fig_zone.update_layout(
-                        title=dict(text=f"vs {hand}HP", x=0.5, font=dict(size=16, color="white")),
-                        xaxis=dict(range=[-1.5, 1.5], visible=False), yaxis=dict(range=[-0.5, 4.0], visible=False), 
-                        width=350, height=450, margin=dict(l=10, r=10, t=40, b=10), 
-                        plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)'
-                    )
-                    return fig_zone
-
                 z_col1, z_col2 = st.columns(2)
                 with z_col1:
-                    st.plotly_chart(draw_performance_grid_hc(p_data, 'Left'), use_container_width=True)
+                    # Uses Global Function defined at top of file
+                    st.plotly_chart(draw_performance_grid(filtered_data, 'Left'), use_container_width=True)
                 with z_col2:
-                    st.plotly_chart(draw_performance_grid_hc(p_data, 'Right'), use_container_width=True)
+                    st.plotly_chart(draw_performance_grid(filtered_data, 'Right'), use_container_width=True)
 
-                # --- 8. DOWNLOAD BUTTON (FOR ADMINS) ---
+                # --- 6. ADMIN DOWNLOAD ---
                 if st.session_state.get("is_admin", False):
                     st.divider()
                     st.markdown("### 💾 Save Your Work")
@@ -2660,6 +2259,8 @@ elif app == "Holy Cross Pitcher":
                             )
                     else:
                         st.info("Make a change above to generate a downloadable file.")
+        else:
+            st.info("Select a pitcher in the sidebar to view data.")
 
 
     with tab3:
