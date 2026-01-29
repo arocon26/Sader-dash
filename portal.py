@@ -143,7 +143,7 @@ def load_players_for_team(team_name, app_type="hitter"):
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_player_data(player_name, team_name, app_type="hitter"):
-    """Load ONLY data for selected player - Optimized with Smart Caching & Safe Index"""
+    """Load ONLY data for selected player - Prioritizing Local Fixes"""
     if app_type == "hitter":
         team_col = "newestTeamName_Batter"
         player_col = "Batter"
@@ -152,20 +152,37 @@ def load_player_data(player_name, team_name, app_type="hitter"):
         player_col = "Pitcher"
     
     try:
-        local_path = get_local_data_path()
-        # Read FULL file first to preserve Master Index (Crucial for Admin Fixes)
-        df = pd.read_parquet(local_path, columns=ESSENTIAL_COLS, engine='pyarrow')
+        # --- PRIORITY CHECK (The Fix) ---
+        # 1. Check if we have a locally fixed file (from Admin edits)
+        if os.path.exists("ncaa_data_2025.parquet"):
+            load_source = "ncaa_data_2025.parquet"
+        else:
+            # 2. If not, use the cached version from the Dataset URL
+            load_source = get_local_data_path()
+
+        # 3. Read Data
+        # We read the FULL file to preserve the master index, which is critical for the fixer
+        df = pd.read_parquet(
+            load_source, 
+            columns=ESSENTIAL_COLS, 
+            engine='pyarrow'
+        )
+
+        # 4. Filter in Memory
         df = df[(df[team_col] == team_name) & (df[player_col] == player_name)]
         
-        # Clean pitch types (But keep Sinker separate!)
-        if not df.empty and 'TaggedPitchType' in df.columns:
-            df['TaggedPitchType'] = df['TaggedPitchType'].replace({
-                'ChangeUp': 'Changeup', 
-                'One-Seam Fastball': 'Sinker'
-            })
-        return df
-    except Exception:
+    except Exception as e:
+        # st.warning(f"⚠️ Load failed: {e}") # Optional: Uncomment for debugging
         return pd.DataFrame()
+    
+    # Clean pitch types
+    if not df.empty and 'TaggedPitchType' in df.columns:
+        df['TaggedPitchType'] = df['TaggedPitchType'].replace({
+            'ChangeUp': 'Changeup', 
+            'One-Seam Fastball': 'Sinker'
+        })
+    
+    return df
 
 # --- 5. INITIALIZE ADMIN STATE & HEADER ---
 if "is_admin" not in st.session_state: st.session_state["is_admin"] = False
