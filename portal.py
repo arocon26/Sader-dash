@@ -1092,6 +1092,7 @@ elif app == "NCAA Pitcher":
                             with c2:
                                 st.write("") 
                                 if st.button(f"✅ Apply Fix", key=f"btn_{chart_name}"):
+                                    success = False # Track success status
                                     try:
                                         # Load Master File
                                         path = get_local_data_path()
@@ -1104,26 +1105,28 @@ elif app == "NCAA Pitcher":
                                         valid_indices = [i for i in safe_indices if i in full_df.index]
                                         if len(valid_indices) == 0:
                                             st.error("❌ Error: Indices not found in master file.")
-                                            return
+                                            st.stop() # Stop execution safely
 
                                         # 3. SAFETY CHECK
                                         target_pitchers = full_df.loc[valid_indices, 'Pitcher'].unique()
                                         if len(target_pitchers) > 1 or target_pitchers[0] != sel_pitcher_raw:
-                                            st.error(f"🛑 CRITICAL SAFETY STOP: Name Mismatch! \n"
-                                                     f"Viewing: {sel_pitcher_raw} vs Target: {target_pitchers}")
-                                            return
+                                            st.error(f"🛑 Name Mismatch! Viewing: {sel_pitcher_raw}")
+                                            st.stop()
 
                                         # 4. EXECUTE SAVE
                                         full_df.loc[valid_indices, 'TaggedPitchType'] = new_tag
                                         full_df.to_parquet("ncaa_data_2025.parquet", index=False)
                                         
-                                        # 5. CLEAR CACHE & REFRESH (The Fix!)
+                                        # 5. CLEAR CACHE
                                         st.cache_data.clear()
-                                        st.toast(f"✅ Success! Updated {len(valid_indices)} pitches to {new_tag}.", icon="💾")
-                                        st.rerun()
+                                        success = True
                                         
                                     except Exception as e: 
                                         st.error(f"Error: {e}")
+                                    
+                                    # 6. RERUN OUTSIDE THE TRY/EXCEPT BLOCK
+                                    if success:
+                                        st.rerun()
 
                 # 1. MOVEMENT PROFILE
                 st.subheader("Interactive Movement Profile (IVB vs HB)")
