@@ -963,23 +963,20 @@ elif app == "NCAA Pitcher":
     
     # 2. Pitcher Selection (Dependent on Team)
     pitchers = load_players_for_team(sel_team, "pitcher")
-    
-    # Format names: "O'Connor, Andrew" -> "Andrew O'Connor"
     pitchers_fmt = [' '.join(p.split(', ')[::-1]) if ', ' in p else p for p in pitchers]
     sel_pitcher_fmt = st.sidebar.selectbox("Select Pitcher", pitchers_fmt, key="ncaa_p_player")
     
-    # Convert back to raw format for data loading
     sel_pitcher_raw = ', '.join(sel_pitcher_fmt.split(' ')[::-1]) if ' ' in sel_pitcher_fmt else sel_pitcher_fmt
 
-    # 3. Load Data (ONCE for all tabs)
-    # 3. Load Data (Base File)
-    # We use the standard loader (no version hacks needed anymore)
-    # 3. Load Data with live edits applied
     data_raw = load_player_data(sel_pitcher_raw, sel_team, "pitcher", version=st.session_state.data_version)
 
     # Apply any in-memory edits
     # 3. Load Data (Base File)
     data = data_raw.copy()
+    if st.session_stat.pitch_edits:
+        for idx, new_tag in st.session_state.pitch_edits.items():
+            if idx in data.index:
+                data.at[idx, 'TaggedPitchType'] = new_tag    
 
     # --- BIO HEADER ---
     if not data.empty:
@@ -1061,7 +1058,7 @@ elif app == "NCAA Pitcher":
                 with col_d1:
                     st.write("Click to generate the final file with all your changes applied.")
                 with col_d2:
-                    if st.button("💾 Prepare Download"):
+                    if st.button("💾 Prepare Download", key="ncaa_download_btn"):
                         with st.spinner("Applying edits to master file..."):
                             path = get_local_data_path()
                             if os.path.exists("ncaa_data_2025.parquet"):
@@ -1081,138 +1078,120 @@ elif app == "NCAA Pitcher":
                             label="⬇️ Download New Dataset",
                             data=f,
                             file_name="ncaa_data_2025.parquet",
-                            mime="application/octet-stream"
+                            mime="application/octet-stream",
+                            key="ncaa_dl_file"
                         )
-        
-        # Filters (Date Only)
-        c1, c2 = st.columns([1, 3]) 
-        with c1:
-            date_range = st.date_input("Date Range", [pd.to_datetime("2025-01-01"), pd.to_datetime("2025-12-31")], key="ncaa_p_date_tab2")
 
         if not data.empty:
-            filtered_data = data.copy()
-            filtered_data['Date'] = pd.to_datetime(filtered_data['Date'])
+            # Apply session edits directly to data (no filtering)
+            display_data = data.copy()
+            if st.session_state.pitch_edits:
+                for idx, new_tag in st.session_state.pitch_edits.items():
+                    if idx in display_data.index:
+                        display_data.at[idx, 'TaggedPitchType'] = new_tag
             
             # Numeric conversion for charts
             for col in ['RelSpeed', 'SpinRate', 'InducedVertBreak', 'HorzBreak', 'PlateLocSide', 'PlateLocHeight']:
-                if col in filtered_data.columns:
-                    filtered_data[col] = pd.to_numeric(filtered_data[col], errors='coerce')
+                if col in display_data.columns:
+                    display_data[col] = pd.to_numeric(display_data[col], errors='coerce')
 
-            # Apply Date Filter
-            if len(date_range) == 2:
-                filtered_data = filtered_data[(filtered_data['Date'] >= pd.to_datetime(date_range[0])) & 
-                                            (filtered_data['Date'] <= pd.to_datetime(date_range[1]))]
-
-            # ✅ THE KEY FIX: Apply session edits to filtered_data AFTER date filter
-            if st.session_state.pitch_edits:
-                for idx, new_tag in st.session_state.pitch_edits.items():
-                    if idx in filtered_data.index:
-                        filtered_data.at[idx, 'TaggedPitchType'] = new_tag
-
-            if filtered_data.empty:
-                st.warning("No data found for this date range.")
-            else:
-                # --- LOCAL FIXING WIDGET ---
-                def show_admin_fix_widget(selected_data, chart_name):
-                    if not st.session_state.get("is_admin", False): 
+            # --- LOCAL FIXING WIDGET ---
+            def show_admin_fix_widget(selected_data, chart_name):
+                if not st.session_state.get("is_admin", False): 
+                    return
+                
+                if selected_data and "selection" in selected_data:
+                    pts = selected_data["selection"]["points"]
+                    if not pts: 
                         return
                     
-                    if selected_data and "selection" in selected_data:
-                        pts = selected_data["selection"]["points"]
-                        if not pts: 
-                            return
+                    # Extract indices from customdata
+                    safe_indices = []
+                    for p in pts:
+                        try:
+                            if "customdata" in p and p["customdata"] is not None:
+                                cd = p["customdata"]
+                                # Handle dictionary format: {'0': 368083}
+                                if isinstance(cd, dict):
+                                    idx = int(list(cd.values())[0])
+                                    safe_indices.append(idx)
+                                # Handle list/array format: [368083]
+                                elif isinstance(cd, (list, tuple, np.ndarray)) and len(cd) > 0:
+                                    idx = int(cd[0])
+                                    safe_indices.append(idx)
+                        except:
+                            continue
+                    
+                    if safe_indices:
+                        st.info(f"🔍 Selected {len(safe_indices)} pitches")
                         
-                        # Extract indices with explicit error handling
-                        safe_indices = []
-                        for p in pts:
-                            try:
-                                if "customdata" in p:
-                                    cd = p["customdata"]
-                                    
-                                    # ✅ FIX: Handle dictionary format from Plotly
-                                    if isinstance(cd, dict):
-                                        # Get the first value from the dict
-                                        idx = int(list(cd.values())[0])
-                                        safe_indices.append(idx)
-                                    elif isinstance(cd, (list, tuple, np.ndarray)) and len(cd) > 0:
-                                        idx = int(cd[0])
-                                        safe_indices.append(idx)
-                            except Exception as e:
-                                st.error(f"Error extracting index: {e}")
-                                continue
-                        
-                        if safe_indices:
-                            st.info(f"🔍 Selected {len(safe_indices)} pitches")
-                            
-                            c1, c2 = st.columns([2, 1])
-                            with c1:
-                                new_tag = st.selectbox(
-                                    "Change to:", 
-                                    list(PITCH_PALETTE.keys()), 
-                                    key=f"fix_{chart_name}"
-                                )
-                            with c2:
-                                st.write("") 
-                                if st.button(f"✅ Apply", key=f"btn_{chart_name}"):
-                                    for idx in safe_indices:
-                                        st.session_state.pitch_edits[idx] = new_tag
-                                    
-                                    st.success(f"✅ Tagged {len(safe_indices)} pitches as {new_tag}")
-                                    st.rerun()
+                        c1, c2 = st.columns([2, 1])
+                        with c1:
+                            new_tag = st.selectbox(
+                                "Change to:", 
+                                list(PITCH_PALETTE.keys()), 
+                                key=f"fix_{chart_name}"
+                            )
+                        with c2:
+                            st.write("") 
+                            if st.button(f"✅ Apply", key=f"btn_{chart_name}"):
+                                for idx in safe_indices:
+                                    st.session_state.pitch_edits[idx] = new_tag
+                                
+                                st.success(f"✅ Tagged {len(safe_indices)} pitches as {new_tag}")
+                                st.rerun()
 
-                # 1. MOVEMENT PROFILE
-                st.subheader("Interactive Movement Profile (IVB vs HB)")
-                st.caption("Lasso to inspect or fix pitch tags.")
-                
-                fig_mov = px.scatter(
-                    filtered_data, x="HorzBreak", y="InducedVertBreak", 
-                    color="TaggedPitchType", color_discrete_map=PITCH_PALETTE,
-                    hover_data=["RelSpeed", "SpinRate", "Date"], width=650, height=650
-                )
-                fig_mov.add_hline(y=0, line_dash="dash", line_color="black")
-                fig_mov.add_vline(x=0, line_dash="dash", line_color="black")
-                fig_mov.update_layout(
-                    xaxis=dict(range=[-30, 30], title="Horizontal Break (in)"), 
-                    yaxis=dict(range=[-30, 30], title="Induced Vertical Break (in)", scaleanchor="x", scaleratio=1),
-                    plot_bgcolor='white', dragmode='lasso'
-                )
-                # ✅ FIX: Ensure customdata is 2D array
-                fig_mov.update_traces(customdata=filtered_data.index.values.reshape(-1, 1))
+            # 1. MOVEMENT PROFILE
+            st.subheader("Interactive Movement Profile (IVB vs HB)")
+            st.caption("Lasso to inspect or fix pitch tags.")
+            
+            fig_mov = px.scatter(
+                display_data, x="HorzBreak", y="InducedVertBreak", 
+                color="TaggedPitchType", color_discrete_map=PITCH_PALETTE,
+                hover_data=["RelSpeed", "SpinRate", "Date"], width=650, height=650
+            )
+            fig_mov.add_hline(y=0, line_dash="dash", line_color="black")
+            fig_mov.add_vline(x=0, line_dash="dash", line_color="black")
+            fig_mov.update_layout(
+                xaxis=dict(range=[-30, 30], title="Horizontal Break (in)"), 
+                yaxis=dict(range=[-30, 30], title="Induced Vertical Break (in)", scaleanchor="x", scaleratio=1),
+                plot_bgcolor='white', dragmode='lasso'
+            )
+            fig_mov.update_traces(customdata=display_data.index.values.reshape(-1, 1))
 
-                selection_mov = st.plotly_chart(fig_mov, on_select="rerun", selection_mode=["box", "lasso"], key="ncaa_mov_scatter")
-                show_admin_fix_widget(selection_mov, "ncaa_movement_chart")
-                
-                st.divider()
+            selection_mov = st.plotly_chart(fig_mov, on_select="rerun", selection_mode=["box", "lasso"], key="ncaa_mov_scatter")
+            show_admin_fix_widget(selection_mov, "ncaa_movement_chart")
+            
+            st.divider()
 
-                # 2. VELOCITY vs SPIN RATE
-                st.subheader("Velocity vs. Spin Rate")
-                st.caption("Identify misclassified pitches by spin/velo clusters.")
+            # 2. VELOCITY vs SPIN RATE
+            st.subheader("Velocity vs. Spin Rate")
+            st.caption("Identify misclassified pitches by spin/velo clusters.")
 
-                fig_ss = px.scatter(
-                    filtered_data, x='RelSpeed', y='SpinRate', 
-                    color='TaggedPitchType', color_discrete_map=PITCH_PALETTE,
-                    labels={'RelSpeed': 'Velocity (MPH)', 'SpinRate': 'Spin Rate (RPM)'},
-                    hover_data=['RelSpeed', 'SpinRate', 'Date'], width=750, height=500
-                )
-                fig_ss.update_layout(plot_bgcolor='white', dragmode='lasso')
-                # ✅ FIX: Ensure customdata is 2D array
-                fig_ss.update_traces(
-                    customdata=filtered_data.index.values.reshape(-1, 1), 
-                    marker=dict(size=8, line=dict(width=1, color='white'))
-                )
+            fig_ss = px.scatter(
+                display_data, x='RelSpeed', y='SpinRate', 
+                color='TaggedPitchType', color_discrete_map=PITCH_PALETTE,
+                labels={'RelSpeed': 'Velocity (MPH)', 'SpinRate': 'Spin Rate (RPM)'},
+                hover_data=['RelSpeed', 'SpinRate', 'Date'], width=750, height=500
+            )
+            fig_ss.update_layout(plot_bgcolor='white', dragmode='lasso')
+            fig_ss.update_traces(
+                customdata=display_data.index.values.reshape(-1, 1), 
+                marker=dict(size=8, line=dict(width=1, color='white'))
+            )
 
-                selection_ss = st.plotly_chart(fig_ss, on_select="rerun", selection_mode=["box", "lasso"], key="ncaa_velo_spin_scatter")
-                show_admin_fix_widget(selection_ss, "ncaa_velo_spin_chart")
+            selection_ss = st.plotly_chart(fig_ss, on_select="rerun", selection_mode=["box", "lasso"], key="ncaa_velo_spin_scatter")
+            show_admin_fix_widget(selection_ss, "ncaa_velo_spin_chart")
 
-                st.divider()
+            st.divider()
 
-                # 3. PERFORMANCE BY ZONE
-                st.subheader("📍 Performance by Zone")
-                z_col1, z_col2 = st.columns(2)
-                with z_col1:
-                    st.plotly_chart(draw_performance_grid(filtered_data, 'Left'), use_container_width=True)
-                with z_col2:
-                    st.plotly_chart(draw_performance_grid(filtered_data, 'Right'), use_container_width=True)
+            # 3. PERFORMANCE BY ZONE
+            st.subheader("📍 Performance by Zone")
+            z_col1, z_col2 = st.columns(2)
+            with z_col1:
+                st.plotly_chart(draw_performance_grid(display_data, 'Left'), use_container_width=True)
+            with z_col2:
+                st.plotly_chart(draw_performance_grid(display_data, 'Right'), use_container_width=True)
         else:
             st.info("Select a pitcher in the sidebar to view data.")
 
