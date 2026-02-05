@@ -978,13 +978,8 @@ elif app == "NCAA Pitcher":
     data_raw = load_player_data(sel_pitcher_raw, sel_team, "pitcher", version=st.session_state.data_version)
 
     # Apply any in-memory edits
+    # 3. Load Data (Base File)
     data = data_raw.copy()
-    if not data.empty and st.session_state.pitch_edits:
-        for idx in st.session_state.pitch_edits.keys():
-            if idx in data.index:
-                data.at[idx, 'TaggedPitchType'] = st.session_state.pitch_edits[idx]
-        
-        st.toast(f"📝 {len(st.session_state.pitch_edits)} edits applied from memory")
 
     # --- BIO HEADER ---
     if not data.empty:
