@@ -1047,6 +1047,7 @@ elif app == "NCAA Pitcher":
             st.info("Select a pitcher to view data.")
 
     # --- TAB 2: STUFF VISUALS ---
+    # --- TAB 2: STUFF VISUALS ---
     with tab2:
         # --- ADMIN: COMMIT CHANGES AT TOP ---
         if st.session_state.get("is_admin", False):
@@ -1085,40 +1086,37 @@ elif app == "NCAA Pitcher":
                     st.info("📤 Upload this file to your Hugging Face dataset to replace the old one.")
 
         if not data.empty:
-            # Use data that ALREADY has session edits applied (from line 976)
+            # Use data that ALREADY has session edits applied
             display_data = data.copy()
             
+            # --- CRITICAL FIX: Preserve Index for Lasso ---
+            # Create a dedicated column for the index so Plotly maps it correctly 
+            # even if it reorders points by color.
+            display_data['unique_id'] = display_data.index 
+
             # Numeric conversion for charts
             for col in ['RelSpeed', 'SpinRate', 'InducedVertBreak', 'HorzBreak', 'PlateLocSide', 'PlateLocHeight']:
                 if col in display_data.columns:
                     display_data[col] = pd.to_numeric(display_data[col], errors='coerce')
 
-            # --- LOCAL FIXING WIDGET ---
+            # --- LOCAL FIXING WIDGET (UPDATED) ---
             def show_admin_fix_widget(selected_data, chart_name):
                 if not st.session_state.get("is_admin", False): 
                     return
                 
-                if selected_data and "selection" in selected_data:
+                # Check if points are selected
+                if selected_data and "selection" in selected_data and selected_data["selection"]["points"]:
                     pts = selected_data["selection"]["points"]
-                    if not pts: 
-                        return
                     
-                    # Extract indices from customdata
                     safe_indices = []
                     for p in pts:
-                        try:
-                            if "customdata" in p and p["customdata"] is not None:
-                                cd = p["customdata"]
-                                # Handle dictionary format: {'0': 368083}
-                                if isinstance(cd, dict):
-                                    idx = int(list(cd.values())[0])
-                                    safe_indices.append(idx)
-                                # Handle list/array format: [368083]
-                                elif isinstance(cd, (list, tuple, np.ndarray)) and len(cd) > 0:
-                                    idx = int(cd[0])
-                                    safe_indices.append(idx)
-                        except:
-                            continue
+                        # Plotly returns customdata as a list [value]
+                        if "customdata" in p and len(p["customdata"]) > 0:
+                            try:
+                                idx = int(p["customdata"][0])
+                                safe_indices.append(idx)
+                            except:
+                                continue
                     
                     if safe_indices:
                         st.info(f"🔍 Selected {len(safe_indices)} pitches")
@@ -1133,12 +1131,11 @@ elif app == "NCAA Pitcher":
                         with c2:
                             st.write("") 
                             if st.button(f"✅ Apply", key=f"btn_{chart_name}"):
-                                # Store edits in session state (persists across pitchers)
+                                # Store edits in session state
                                 for idx in safe_indices:
                                     st.session_state.pitch_edits[idx] = new_tag
                                 
                                 st.session_state.data_version += 1
-                                
                                 st.success(f"✅ Tagged {len(safe_indices)} pitches as {new_tag}")
                                 st.rerun()
 
@@ -1149,7 +1146,10 @@ elif app == "NCAA Pitcher":
             fig_mov = px.scatter(
                 display_data, x="HorzBreak", y="InducedVertBreak", 
                 color="TaggedPitchType", color_discrete_map=PITCH_PALETTE,
-                hover_data=["RelSpeed", "SpinRate", "Date"], width=650, height=650
+                hover_data=["RelSpeed", "SpinRate", "Date"], 
+                # --- FIX: Pass unique_id here instead of update_traces ---
+                custom_data=['unique_id'], 
+                width=650, height=650
             )
             fig_mov.add_hline(y=0, line_dash="dash", line_color="black")
             fig_mov.add_vline(x=0, line_dash="dash", line_color="black")
@@ -1158,7 +1158,7 @@ elif app == "NCAA Pitcher":
                 yaxis=dict(range=[-30, 30], title="Induced Vertical Break (in)", scaleanchor="x", scaleratio=1),
                 plot_bgcolor='white', dragmode='lasso'
             )
-            fig_mov.update_traces(customdata=display_data.index.values.reshape(-1, 1))
+            # Removed the buggy fig_mov.update_traces(customdata=...) line
 
             selection_mov = st.plotly_chart(fig_mov, on_select="rerun", selection_mode=["box", "lasso"], key="ncaa_mov_scatter")
             show_admin_fix_widget(selection_mov, "ncaa_movement_chart")
@@ -1173,11 +1173,13 @@ elif app == "NCAA Pitcher":
                 display_data, x='RelSpeed', y='SpinRate', 
                 color='TaggedPitchType', color_discrete_map=PITCH_PALETTE,
                 labels={'RelSpeed': 'Velocity (MPH)', 'SpinRate': 'Spin Rate (RPM)'},
-                hover_data=['RelSpeed', 'SpinRate', 'Date'], width=750, height=500
+                hover_data=['RelSpeed', 'SpinRate', 'Date'],
+                # --- FIX: Pass unique_id here ---
+                custom_data=['unique_id'],
+                width=750, height=500
             )
             fig_ss.update_layout(plot_bgcolor='white', dragmode='lasso')
             fig_ss.update_traces(
-                customdata=display_data.index.values.reshape(-1, 1), 
                 marker=dict(size=8, line=dict(width=1, color='white'))
             )
 
