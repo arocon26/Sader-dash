@@ -1108,7 +1108,7 @@ elif app == "NCAA Pitcher":
                 filtered_data = filtered_data[(filtered_data['Date'] >= pd.to_datetime(date_range[0])) & 
                                             (filtered_data['Date'] <= pd.to_datetime(date_range[1]))]
 
-            # ✅ THE KEY FIX: Apply session edits to filtered_data BEFORE charting
+            # ✅ THE KEY FIX: Apply session edits to filtered_data AFTER date filter
             if st.session_state.pitch_edits:
                 for idx, new_tag in st.session_state.pitch_edits.items():
                     if idx in filtered_data.index:
