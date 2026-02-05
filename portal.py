@@ -973,7 +973,7 @@ elif app == "NCAA Pitcher":
     # Apply any in-memory edits
     # 3. Load Data (Base File)
     data = data_raw.copy()
-    if st.session_stat.pitch_edits:
+    if st.session_state.pitch_edits:
         for idx, new_tag in st.session_state.pitch_edits.items():
             if idx in data.index:
                 data.at[idx, 'TaggedPitchType'] = new_tag    
