@@ -1066,21 +1066,17 @@ elif app == "NCAA Pitcher":
                 with col_d1:
                     st.write("Click to generate the final file with all your changes applied.")
                 with col_d2:
-                    # Logic to apply ALL edits to the MASTER file
                     if st.button("💾 Prepare Download"):
                         with st.spinner("Applying edits to master file..."):
-                            # 1. Load the REAL master file
                             path = get_local_data_path()
                             if os.path.exists("ncaa_data_2025.parquet"):
                                 path = "ncaa_data_2025.parquet"
                             master_df = pd.read_parquet(path)
                             
-                            # 2. Apply ALL session edits
                             for idx, new_tag in st.session_state.pitch_edits.items():
                                 if idx in master_df.index:
                                     master_df.at[idx, 'TaggedPitchType'] = new_tag
                             
-                            # 3. Save to a temporary file for download
                             master_df.to_parquet("ncaa_data_2025_fixed.parquet", index=False)
                             st.session_state.file_ready = True
                 
@@ -1110,57 +1106,56 @@ elif app == "NCAA Pitcher":
             # Apply Date Filter
             if len(date_range) == 2:
                 filtered_data = filtered_data[(filtered_data['Date'] >= pd.to_datetime(date_range[0])) & 
-                                              (filtered_data['Date'] <= pd.to_datetime(date_range[1]))]
+                                            (filtered_data['Date'] <= pd.to_datetime(date_range[1]))]
+
+            # ✅ THE KEY FIX: Apply session edits to filtered_data BEFORE charting
+            if st.session_state.pitch_edits:
+                for idx, new_tag in st.session_state.pitch_edits.items():
+                    if idx in filtered_data.index:
+                        filtered_data.at[idx, 'TaggedPitchType'] = new_tag
 
             if filtered_data.empty:
                 st.warning("No data found for this date range.")
             else:
-                # --- LOCAL FIXING WIDGET (SAFETY FIRST VERSION) ---
-                # --- LOCAL FIXING WIDGET (FIXED VERSION) ---
-                # --- LOCAL FIXING WIDGET (RAM VERSION) ---
-                # --- LOCAL FIXING WIDGET (RAM VERSION + ID DISPLAY) ---
-                # --- LOCAL FIXING WIDGET (RAM VERSION + ID DISPLAY) ---
+                # --- LOCAL FIXING WIDGET ---
                 def show_admin_fix_widget(selected_data, chart_name):
-                    if not st.session_state.get("is_admin", False): return
+                    if not st.session_state.get("is_admin", False): 
+                        return
                     
                     if selected_data and "selection" in selected_data:
                         pts = selected_data["selection"]["points"]
-                        if not pts: return
+                        if not pts: 
+                            return
                         
-                        # 1. Extract IDs
-                        raw_indices = []
+                        # Extract indices from customdata
+                        safe_indices = []
                         for p in pts:
                             try:
-                                cd = p.get("customdata")
-                                if isinstance(cd, list): val = cd[0]
-                                elif isinstance(cd, dict): val = list(cd.values())[0]
-                                else: val = cd
-                                raw_indices.append(val)
-                            except: pass
-                        
-                        safe_indices = [int(i) for i in raw_indices if i is not None]
+                                if "customdata" in p and p["customdata"]:
+                                    idx = int(p["customdata"][0])
+                                    safe_indices.append(idx)
+                            except (ValueError, TypeError, IndexError):
+                                continue
                         
                         if safe_indices:
-                            # --- FIXED LINE: Now shows the IDs again ---
-                            st.info(f"🔍 Selected {len(safe_indices)} pitches. IDs: {safe_indices[:3]}...")
+                            st.info(f"🔍 Selected {len(safe_indices)} pitches")
                             
                             c1, c2 = st.columns([2, 1])
                             with c1:
-                                new_tag = st.selectbox("Change to:", list(PITCH_PALETTE.keys()), key=f"fix_{chart_name}")
+                                new_tag = st.selectbox(
+                                    "Change to:", 
+                                    list(PITCH_PALETTE.keys()), 
+                                    key=f"fix_{chart_name}"
+                                )
                             with c2:
                                 st.write("") 
-                                # Save to Session State (RAM) for instant preview
-                                if st.button(f"✅ Preview", key=f"btn_{chart_name}"):
-                                    count = 0
+                                if st.button(f"✅ Apply", key=f"btn_{chart_name}"):
+                                    # Store edits in session state
                                     for idx in safe_indices:
-                                        # Save the edit to our dictionary
                                         st.session_state.pitch_edits[idx] = new_tag
-                                        count += 1
                                     
-                                    st.success(f"Updated {count} pitches in preview!")
-                                    import time
-                                    time.sleep(0.2)
-                                    st.rerun() # Refresh immediately to show green dots
+                                    st.success(f"✅ Tagged {len(safe_indices)} pitches as {new_tag}")
+                                    st.rerun()
 
                 # 1. MOVEMENT PROFILE
                 st.subheader("Interactive Movement Profile (IVB vs HB)")
@@ -1178,8 +1173,7 @@ elif app == "NCAA Pitcher":
                     yaxis=dict(range=[-30, 30], title="Induced Vertical Break (in)", scaleanchor="x", scaleratio=1),
                     plot_bgcolor='white', dragmode='lasso'
                 )
-                # Pass Master Index to Chart
-                fig_mov.update_traces(customdata=filtered_data.index) 
+                fig_mov.update_traces(customdata=filtered_data.index.values.reshape(-1, 1))
 
                 selection_mov = st.plotly_chart(fig_mov, on_select="rerun", selection_mode=["box", "lasso"], key="ncaa_mov_scatter")
                 show_admin_fix_widget(selection_mov, "ncaa_movement_chart")
@@ -1197,7 +1191,7 @@ elif app == "NCAA Pitcher":
                     hover_data=['RelSpeed', 'SpinRate', 'Date'], width=750, height=500
                 )
                 fig_ss.update_layout(plot_bgcolor='white', dragmode='lasso')
-                fig_ss.update_traces(customdata=filtered_data.index, marker=dict(size=8, line=dict(width=1, color='white')))
+                fig_ss.update_traces(customdata=filtered_data.index.values.reshape(-1, 1), marker=dict(size=8, line=dict(width=1, color='white')))
 
                 selection_ss = st.plotly_chart(fig_ss, on_select="rerun", selection_mode=["box", "lasso"], key="ncaa_velo_spin_scatter")
                 show_admin_fix_widget(selection_ss, "ncaa_velo_spin_chart")
@@ -1211,16 +1205,6 @@ elif app == "NCAA Pitcher":
                     st.plotly_chart(draw_performance_grid(filtered_data, 'Left'), use_container_width=True)
                 with z_col2:
                     st.plotly_chart(draw_performance_grid(filtered_data, 'Right'), use_container_width=True)
-
-                # 4. ADMIN DOWNLOAD
-                if st.session_state.get("is_admin", False):
-                    st.divider()
-                    st.markdown("### 💾 Save Your Work")
-                    if os.path.exists("ncaa_data_2025.parquet"):
-                        with open("ncaa_data_2025.parquet", "rb") as f:
-                            st.download_button("⬇️ Download Fixed Data", f, "ncaa_data_2025.parquet", "application/octet-stream")
-                    else:
-                        st.info("Make a change above to generate a downloadable file.")
         else:
             st.info("Select a pitcher in the sidebar to view data.")
 
