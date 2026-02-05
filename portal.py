@@ -1120,6 +1120,7 @@ elif app == "NCAA Pitcher":
                 # --- LOCAL FIXING WIDGET (SAFETY FIRST VERSION) ---
                 # --- LOCAL FIXING WIDGET (FIXED VERSION) ---
                 # --- LOCAL FIXING WIDGET (RAM VERSION) ---
+                # --- LOCAL FIXING WIDGET (RAM VERSION + ID DISPLAY) ---
                 def show_admin_fix_widget(selected_data, chart_name):
                     if not st.session_state.get("is_admin", False): return
                     
@@ -1141,14 +1142,15 @@ elif app == "NCAA Pitcher":
                         safe_indices = [int(i) for i in raw_indices if i is not None]
                         
                         if safe_indices:
-                            st.info(f"🔍 Selected {len(safe_indices)} pitches.")
+                            # --- FIXED LINE: Now shows the IDs again ---
+                            st.info(f"🔍 Selected {len(safe_indices)} pitches. IDs: {safe_indices[:3]}...")
                             
                             c1, c2 = st.columns([2, 1])
                             with c1:
                                 new_tag = st.selectbox("Change to:", list(PITCH_PALETTE.keys()), key=f"fix_{chart_name}")
                             with c2:
                                 st.write("") 
-                                # THE CHANGE: Save to Session State (RAM), not Disk
+                                # Save to Session State (RAM) for instant preview
                                 if st.button(f"✅ Preview", key=f"btn_{chart_name}"):
                                     count = 0
                                     for idx in safe_indices:
