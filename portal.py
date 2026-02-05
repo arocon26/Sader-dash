@@ -2038,12 +2038,15 @@ elif app == "Holy Cross Pitcher":
             else:
                 # --- LOCAL FIXING WIDGET ---
                 def show_admin_fix_widget(selected_data, chart_name):
-                    if not st.session_state.get("is_admin", False): return
+                    if not st.session_state.get("is_admin", False): 
+                        return
+                    
                     if selected_data and "selection" in selected_data:
                         pts = selected_data["selection"]["points"]
-                        if not pts: return
+                        if not pts: 
+                            return
                         
-                        # Extract indices - handle BOTH dict and list formats
+                        # Extract indices from customdata
                         safe_indices = []
                         for p in pts:
                             try:
@@ -2057,25 +2060,31 @@ elif app == "Holy Cross Pitcher":
                                     elif isinstance(cd, (list, tuple, np.ndarray)) and len(cd) > 0:
                                         idx = int(cd[0])
                                         safe_indices.append(idx)
-                            except:
+                            except Exception as e:
                                 continue
                         
                         if safe_indices:
-                            st.info(f"🔍 Selected {len(safe_indices)} pitches.")
+                            st.info(f"🔍 Selected {len(safe_indices)} pitches")
+                            
                             c1, c2 = st.columns([2, 1])
                             with c1:
-                                new_tag = st.selectbox("Change to:", list(PITCH_PALETTE.keys()), key=f"fix_{chart_name}")
+                                new_tag = st.selectbox(
+                                    "Change to:", 
+                                    list(PITCH_PALETTE.keys()), 
+                                    key=f"fix_{chart_name}"
+                                )
                             with c2:
                                 st.write("") 
-                                if st.button(f"✅ Apply Fix", key=f"btn_{chart_name}"):
-                                    try:
-                                        path = get_local_data_path()
-                                        full_df = pd.read_parquet(path)
-                                        full_df.loc[safe_indices, 'TaggedPitchType'] = new_tag
-                                        full_df.to_parquet("ncaa_data_2025_fixed.parquet", index=False)
-                                        st.cache_data.clear()
-                                        st.success("✅ Fixed! Download below.")
-                                    except Exception as e: st.error(f"Error: {e}")
+                                if st.button(f"✅ Apply", key=f"btn_{chart_name}"):
+                                    # Store edits in session state
+                                    for idx in safe_indices:
+                                        st.session_state.pitch_edits[idx] = new_tag
+                                    
+                                    st.success(f"✅ Tagged {len(safe_indices)} pitches as {new_tag}")
+                                    
+                                    # Force cache clear and immediate rerun
+                                    st.cache_data.clear()
+                                    st.rerun()
 
                 # 1. MOVEMENT PROFILE
                 st.subheader("Interactive Movement Profile (IVB vs HB)")
