@@ -1058,8 +1058,7 @@ elif app == "NCAA Pitcher":
             if filtered_data.empty:
                 st.warning("No data found for this date range.")
             else:
-                # --- LOCAL FIXING WIDGET (Admin) ---
-                # --- LOCAL FIXING WIDGET (ROBUST VERSION) ---
+                # --- LOCAL FIXING WIDGET (SAFETY FIRST VERSION) ---
                 def show_admin_fix_widget(selected_data, chart_name):
                     if not st.session_state.get("is_admin", False): return
                     
@@ -1067,30 +1066,25 @@ elif app == "NCAA Pitcher":
                         pts = selected_data["selection"]["points"]
                         if not pts: return
                         
-                        # ROBUST EXTRACTION LOGIC
-                        safe_indices = []
+                        # 1. Robust ID Extraction
+                        raw_indices = []
                         for p in pts:
                             try:
                                 cd = p.get("customdata")
-                                # Case 1: It is a list (Standard Plotly) -> Take first item
-                                if isinstance(cd, list): 
-                                    val = cd[0]
-                                # Case 2: It is a Dict (Newer Streamlit) -> Take first value
-                                elif isinstance(cd, dict): 
-                                    val = list(cd.values())[0]
-                                # Case 3: It is already a plain number -> Use directly
-                                else: 
-                                    val = cd
-                                    
-                                safe_indices.append(val)
-                            except: 
-                                pass
+                                if isinstance(cd, list): val = cd[0]
+                                elif isinstance(cd, dict): val = list(cd.values())[0]
+                                else: val = cd
+                                raw_indices.append(val)
+                            except: pass
                         
-                        # Ensure they are valid integers
-                        safe_indices = [int(i) for i in safe_indices if i is not None]
+                        safe_indices = []
+                        for i in raw_indices:
+                            try: safe_indices.append(int(i))
+                            except: pass
                         
                         if safe_indices:
-                            st.info(f"🔍 Selected {len(safe_indices)} pitches.")
+                            st.info(f"🔍 Selected {len(safe_indices)} pitches. First 3 IDs: {safe_indices[:3]}...")
+                            
                             c1, c2 = st.columns([2, 1])
                             with c1:
                                 new_tag = st.selectbox("Change to:", list(PITCH_PALETTE.keys()), key=f"fix_{chart_name}")
@@ -1098,21 +1092,41 @@ elif app == "NCAA Pitcher":
                                 st.write("") 
                                 if st.button(f"✅ Apply Fix", key=f"btn_{chart_name}"):
                                     try:
+                                        # Load Master File
                                         path = get_local_data_path()
+                                        # Safety check: ensure we prioritize local file if it exists
+                                        if os.path.exists("ncaa_data_2025.parquet"):
+                                            path = "ncaa_data_2025.parquet"
+                                            
                                         full_df = pd.read_parquet(path)
                                         
-                                        # Validate against master file
+                                        # 2. VALIDATE INDICES EXIST
                                         valid_indices = [i for i in safe_indices if i in full_df.index]
-                                        
                                         if len(valid_indices) == 0:
                                             st.error("❌ Error: Indices not found in master file.")
                                             return
 
+                                        # 3. *** CORRUPTION GUARDRAIL ***
+                                        # Check if the rows we are about to edit belong to the selected pitcher
+                                        # 'sel_pitcher_raw' is the variable from the outer scope (e.g. "O'Connor, Andrew")
+                                        target_pitchers = full_df.loc[valid_indices, 'Pitcher'].unique()
+                                        
+                                        if len(target_pitchers) > 1 or target_pitchers[0] != sel_pitcher_raw:
+                                            st.error(f"🛑 CRITICAL SAFETY STOP: Name Mismatch! \n\n"
+                                                     f"You are viewing: {sel_pitcher_raw}\n"
+                                                     f"Target file rows belong to: {target_pitchers}\n\n"
+                                                     f"The update was blocked to prevent database corruption.")
+                                            return
+
+                                        # 4. EXECUTE SAVE
                                         full_df.loc[valid_indices, 'TaggedPitchType'] = new_tag
-                                        full_df.to_parquet("ncaa_data_2025_fixed.parquet", index=False)
+                                        full_df.to_parquet("ncaa_data_2025.parquet", index=False)
+                                        
                                         st.cache_data.clear()
                                         st.success("✅ Fixed! Download below.")
-                                    except Exception as e: st.error(f"Error: {e}")
+                                        
+                                    except Exception as e: 
+                                        st.error(f"Error: {e}")
 
                 # 1. MOVEMENT PROFILE
                 st.subheader("Interactive Movement Profile (IVB vs HB)")
@@ -1130,6 +1144,7 @@ elif app == "NCAA Pitcher":
                     yaxis=dict(range=[-30, 30], title="Induced Vertical Break (in)", scaleanchor="x", scaleratio=1),
                     plot_bgcolor='white', dragmode='lasso'
                 )
+                # Pass Master Index to Chart
                 fig_mov.update_traces(customdata=filtered_data.index) 
 
                 selection_mov = st.plotly_chart(fig_mov, on_select="rerun", selection_mode=["box", "lasso"], key="ncaa_mov_scatter")
@@ -1167,8 +1182,8 @@ elif app == "NCAA Pitcher":
                 if st.session_state.get("is_admin", False):
                     st.divider()
                     st.markdown("### 💾 Save Your Work")
-                    if os.path.exists("ncaa_data_2025_fixed.parquet"):
-                        with open("ncaa_data_2025_fixed.parquet", "rb") as f:
+                    if os.path.exists("ncaa_data_2025.parquet"):
+                        with open("ncaa_data_2025.parquet", "rb") as f:
                             st.download_button("⬇️ Download Fixed Data", f, "ncaa_data_2025.parquet", "application/octet-stream")
                     else:
                         st.info("Make a change above to generate a downloadable file.")
@@ -1444,6 +1459,8 @@ elif app == "NCAA Pitcher":
             plot_trend_lines(data)
         else:
             st.warning("No data available.")
+
+    
 
 
 
