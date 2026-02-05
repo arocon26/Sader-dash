@@ -149,6 +149,7 @@ def load_players_for_team(team_name, app_type="hitter"):
     except Exception:
         return []
 
+@st.cache_data(ttl=3600, show_spinner=False)
 def load_player_data(player_name, team_name, app_type="hitter", version=0):
     """
     Load data with version control. 
@@ -164,7 +165,9 @@ def load_player_data(player_name, team_name, app_type="hitter", version=0):
     
     try:
         # 1. Priority: Check for Local Fixes first
-        if os.path.exists("ncaa_data_2025.parquet"):
+        if os.path.exists("ncaa_data_2025_fixed.parquet"):
+            load_source = "ncaa_data_2025_fixed.parquet"
+        elif os.path.exists("ncaa_data_2025.parquet"):
             load_source = "ncaa_data_2025.parquet"
         else:
             load_source = get_local_data_path()
@@ -1133,6 +1136,8 @@ elif app == "NCAA Pitcher":
                                 # Store edits in session state (persists across pitchers)
                                 for idx in safe_indices:
                                     st.session_state.pitch_edits[idx] = new_tag
+                                
+                                st.session_state.data_version += 1
                                 
                                 st.success(f"✅ Tagged {len(safe_indices)} pitches as {new_tag}")
                                 st.rerun()
