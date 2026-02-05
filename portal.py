@@ -1135,15 +1135,13 @@ elif app == "NCAA Pitcher":
                                 if "customdata" in p and p["customdata"] is not None:
                                     # Handle both list and numpy array formats
                                     cd = p["customdata"]
-                                    if hasattr(cd, '__iter__'):
-                                        idx = int(cd[0]) if len(cd) > 0 else None
-                                        if idx is not None:
-                                            safe_indices.append(idx)
-                                    else:
-                                        # Single value (shouldn't happen, but handle it)
-                                        safe_indices.append(int(cd))
+                                    if hasattr(cd, '__len__') and len(cd) > 0:  # ✅ FIXED: Check length exists
+                                        idx = int(cd[0])
+                                        safe_indices.append(idx)
                             except (ValueError, TypeError, IndexError, KeyError) as e:
-                                st.warning(f"⚠️ Skipped invalid point: {e}")
+                                # Only show warning if it's not just "0" (which means the index itself is 0)
+                                if str(e) != "0":
+                                    st.warning(f"⚠️ Skipped invalid point: {e}")
                                 continue
                         
                         if safe_indices:
