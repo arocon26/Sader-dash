@@ -2043,7 +2043,22 @@ elif app == "Holy Cross Pitcher":
                         pts = selected_data["selection"]["points"]
                         if not pts: return
                         
-                        safe_indices = [int(p["customdata"][0]) for p in pts if "customdata" in p]
+                        # Extract indices - handle BOTH dict and list formats
+                        safe_indices = []
+                        for p in pts:
+                            try:
+                                if "customdata" in p and p["customdata"] is not None:
+                                    cd = p["customdata"]
+                                    # Handle dictionary format: {'0': 368083}
+                                    if isinstance(cd, dict):
+                                        idx = int(list(cd.values())[0])
+                                        safe_indices.append(idx)
+                                    # Handle list/array format: [368083]
+                                    elif isinstance(cd, (list, tuple, np.ndarray)) and len(cd) > 0:
+                                        idx = int(cd[0])
+                                        safe_indices.append(idx)
+                            except:
+                                continue
                         
                         if safe_indices:
                             st.info(f"🔍 Selected {len(safe_indices)} pitches.")
