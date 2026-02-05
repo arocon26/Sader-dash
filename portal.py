@@ -1135,8 +1135,8 @@ elif app == "NCAA Pitcher":
                                 for idx in safe_indices:
                                     st.session_state.pitch_edits[idx] = new_tag
                                 
-                                # Increment version to force data reload with edits
-                                st.session_state.data_version += 1
+                                # ✅ THE KEY FIX: Clear the load_player_data cache completely
+                                load_player_data.clear()
                                 
                                 st.success(f"✅ Tagged {len(safe_indices)} pitches as {new_tag}")
                                 st.rerun()
