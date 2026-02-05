@@ -1135,7 +1135,7 @@ elif app == "NCAA Pitcher":
                                 if "customdata" in p and p["customdata"] is not None:
                                     # Handle both list and numpy array formats
                                     cd = p["customdata"]
-                                    if hasattr(cd, '__len__') and len(cd) > 0:  # ✅ FIXED: Check length exists
+                                    if hasattr(cd, '__len__') and len(cd) > 0:
                                         idx = int(cd[0])
                                         safe_indices.append(idx)
                             except (ValueError, TypeError, IndexError, KeyError) as e:
