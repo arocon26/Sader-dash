@@ -2076,14 +2076,11 @@ elif app == "Holy Cross Pitcher":
                             with c2:
                                 st.write("") 
                                 if st.button(f"✅ Apply", key=f"btn_{chart_name}"):
-                                    # Store edits in session state
                                     for idx in safe_indices:
                                         st.session_state.pitch_edits[idx] = new_tag
                                     
                                     st.success(f"✅ Tagged {len(safe_indices)} pitches as {new_tag}")
-                                    
-                                    # Force cache clear and immediate rerun
-                                    st.cache_data.clear()
+                                    # ✅ DON'T clear cache - just rerun
                                     st.rerun()
 
                 # 1. MOVEMENT PROFILE
