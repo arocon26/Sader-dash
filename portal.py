@@ -2031,7 +2031,13 @@ elif app == "Holy Cross Pitcher":
             # Apply Date Filter
             if len(date_range) == 2:
                 filtered_data = filtered_data[(filtered_data['Date'] >= pd.to_datetime(date_range[0])) & 
-                                              (filtered_data['Date'] <= pd.to_datetime(date_range[1]))]
+                                            (filtered_data['Date'] <= pd.to_datetime(date_range[1]))]
+
+            # ✅ ADD THIS BLOCK HERE (BEFORE "if filtered_data.empty:")
+            if st.session_state.pitch_edits:
+                for idx, new_tag in st.session_state.pitch_edits.items():
+                    if idx in filtered_data.index:
+                        filtered_data.at[idx, 'TaggedPitchType'] = new_tag
 
             if filtered_data.empty:
                 st.warning("No data found for this date range.")
@@ -2078,7 +2084,7 @@ elif app == "Holy Cross Pitcher":
                     yaxis=dict(range=[-30, 30], title="Induced Vertical Break (in)", scaleanchor="x", scaleratio=1),
                     plot_bgcolor='white', dragmode='lasso'
                 )
-                fig_mov.update_traces(customdata=filtered_data.index) # Required for fixer
+                fig_mov.update_traces(customdata=filtered_data.index.values.reshape(-1, 1))
 
                 selection_mov = st.plotly_chart(fig_mov, on_select="rerun", selection_mode=["box", "lasso"], key="hc_mov_scatter")
                 show_admin_fix_widget(selection_mov, "hc_movement_chart")
@@ -2096,8 +2102,10 @@ elif app == "Holy Cross Pitcher":
                     hover_data=['RelSpeed', 'SpinRate', 'Date'], width=750, height=500
                 )
                 fig_ss.update_layout(plot_bgcolor='white', dragmode='lasso')
-                fig_ss.update_traces(customdata=filtered_data.index, marker=dict(size=8, line=dict(width=1, color='white')))
-
+                fig_ss.update_traces(
+                    customdata=filtered_data.index.values.reshape(-1, 1), 
+                    marker=dict(size=8, line=dict(width=1, color='white'))
+                )
                 selection_ss = st.plotly_chart(fig_ss, on_select="rerun", selection_mode=["box", "lasso"], key="hc_velo_spin_scatter")
                 show_admin_fix_widget(selection_ss, "hc_velo_spin_chart")
 
