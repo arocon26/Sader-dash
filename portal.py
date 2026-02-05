@@ -8,6 +8,10 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from huggingface_hub import hf_hub_download
 
+# --- INIT SESSION STATE ---
+if 'data_version' not in st.session_state:
+    st.session_state.data_version = 0
+
 # --- 1. PAGE CONFIGURATION ---
 st.set_page_config(layout="wide", page_title="Sader Dash")
 
@@ -142,8 +146,12 @@ def load_players_for_team(team_name, app_type="hitter"):
         return []
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def load_player_data(player_name, team_name, app_type="hitter"):
-    """Load ONLY data for selected player - Prioritizing Local Fixes"""
+def load_player_data(player_name, team_name, app_type="hitter", version=0):
+    """
+    Load data with version control. 
+    The 'version' arg forces Streamlit to re-run this function 
+    when we increment the number.
+    """
     if app_type == "hitter":
         team_col = "newestTeamName_Batter"
         player_col = "Batter"
@@ -152,27 +160,23 @@ def load_player_data(player_name, team_name, app_type="hitter"):
         player_col = "Pitcher"
     
     try:
-        # --- PRIORITY CHECK (The Fix) ---
-        # 1. Check if we have a locally fixed file (from Admin edits)
+        # 1. Priority: Check for Local Fixes first
         if os.path.exists("ncaa_data_2025.parquet"):
             load_source = "ncaa_data_2025.parquet"
         else:
-            # 2. If not, use the cached version from the Dataset URL
             load_source = get_local_data_path()
 
-        # 3. Read Data
-        # We read the FULL file to preserve the master index, which is critical for the fixer
+        # 2. Read Data
         df = pd.read_parquet(
             load_source, 
             columns=ESSENTIAL_COLS, 
             engine='pyarrow'
         )
 
-        # 4. Filter in Memory
+        # 3. Filter
         df = df[(df[team_col] == team_name) & (df[player_col] == player_name)]
         
     except Exception as e:
-        # st.warning(f"⚠️ Load failed: {e}") # Optional: Uncomment for debugging
         return pd.DataFrame()
     
     # Clean pitch types
@@ -964,7 +968,7 @@ elif app == "NCAA Pitcher":
     sel_pitcher_raw = ', '.join(sel_pitcher_fmt.split(' ')[::-1]) if ' ' in sel_pitcher_fmt else sel_pitcher_fmt
 
     # 3. Load Data (ONCE for all tabs)
-    data = load_player_data(sel_pitcher_raw, sel_team, "pitcher")
+    data = load_player_data(sel_pitcher_raw, sel_team, "pitcher", version=st.session_state.data_version)
 
     # --- BIO HEADER ---
     if not data.empty:
@@ -1125,7 +1129,13 @@ elif app == "NCAA Pitcher":
                                         st.error(f"Error: {e}")
                                     
                                     # 6. RERUN OUTSIDE THE TRY/EXCEPT BLOCK
+                                    # 6. RERUN OUTSIDE THE TRY/EXCEPT BLOCK
                                     if success:
+                                        # Increment version to force a fresh reload
+                                        st.session_state.data_version += 1
+                                        st.success("✅ Fixed! Reloading...")
+                                        import time
+                                        time.sleep(0.5)
                                         st.rerun()
 
                 # 1. MOVEMENT PROFILE
