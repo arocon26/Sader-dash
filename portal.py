@@ -1127,29 +1127,24 @@ elif app == "NCAA Pitcher":
                         if not pts: 
                             return
                         
-                        # DEBUG: Show what we're getting
-                        st.write(f"DEBUG: Found {len(pts)} points")
-                        
                         # Extract indices with explicit error handling
                         safe_indices = []
                         for p in pts:
                             try:
                                 if "customdata" in p:
                                     cd = p["customdata"]
-                                    st.write(f"DEBUG customdata: {cd}, type: {type(cd)}")
                                     
-                                    # Try to get first element
-                                    if isinstance(cd, (list, tuple, np.ndarray)) and len(cd) > 0:
+                                    # ✅ FIX: Handle dictionary format from Plotly
+                                    if isinstance(cd, dict):
+                                        # Get the first value from the dict
+                                        idx = int(list(cd.values())[0])
+                                        safe_indices.append(idx)
+                                    elif isinstance(cd, (list, tuple, np.ndarray)) and len(cd) > 0:
                                         idx = int(cd[0])
                                         safe_indices.append(idx)
-                                        st.write(f"✅ Got index: {idx}")
-                                    else:
-                                        st.write(f"❌ customdata wrong format: {cd}")
                             except Exception as e:
                                 st.error(f"Error extracting index: {e}")
                                 continue
-                        
-                        st.write(f"DEBUG: Extracted {len(safe_indices)} valid indices")
                         
                         if safe_indices:
                             st.info(f"🔍 Selected {len(safe_indices)} pitches")
@@ -1169,8 +1164,6 @@ elif app == "NCAA Pitcher":
                                     
                                     st.success(f"✅ Tagged {len(safe_indices)} pitches as {new_tag}")
                                     st.rerun()
-                        else:
-                            st.warning("⚠️ Could not extract indices from selection. Check DEBUG output above.")
 
                 # 1. MOVEMENT PROFILE
                 st.subheader("Interactive Movement Profile (IVB vs HB)")
