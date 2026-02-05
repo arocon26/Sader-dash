@@ -974,19 +974,17 @@ elif app == "NCAA Pitcher":
     # 3. Load Data (ONCE for all tabs)
     # 3. Load Data (Base File)
     # We use the standard loader (no version hacks needed anymore)
-    data_raw = load_player_data(sel_pitcher_raw, sel_team, "pitcher")
-    
-    # --- INSTANT PREVIEW PATCHER ---
-    # This applies your edits from RAM onto the data immediately
-    data = data_raw.copy() # Work on a copy so we don't break the cache
+    # 3. Load Data with live edits applied
+    data_raw = load_player_data(sel_pitcher_raw, sel_team, "pitcher", version=st.session_state.data_version)
+
+    # Apply any in-memory edits
+    data = data_raw.copy()
     if not data.empty and st.session_state.pitch_edits:
-        # Check if any of the edited pitches belong to this player
-        edited_indices = [i for i in st.session_state.pitch_edits.keys() if i in data.index]
-        if edited_indices:
-            for idx in edited_indices:
+        for idx in st.session_state.pitch_edits.keys():
+            if idx in data.index:
                 data.at[idx, 'TaggedPitchType'] = st.session_state.pitch_edits[idx]
-            # Optional: Toast notification that edits are active
-            # st.toast(f"Applying {len(edited_indices)} edits from memory.")
+        
+        st.toast(f"📝 {len(st.session_state.pitch_edits)} edits applied from memory")
 
     # --- BIO HEADER ---
     if not data.empty:
@@ -1120,6 +1118,7 @@ elif app == "NCAA Pitcher":
                 # --- LOCAL FIXING WIDGET (SAFETY FIRST VERSION) ---
                 # --- LOCAL FIXING WIDGET (FIXED VERSION) ---
                 # --- LOCAL FIXING WIDGET (RAM VERSION) ---
+                # --- LOCAL FIXING WIDGET (RAM VERSION + ID DISPLAY) ---
                 # --- LOCAL FIXING WIDGET (RAM VERSION + ID DISPLAY) ---
                 def show_admin_fix_widget(selected_data, chart_name):
                     if not st.session_state.get("is_admin", False): return
