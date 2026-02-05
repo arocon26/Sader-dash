@@ -149,7 +149,6 @@ def load_players_for_team(team_name, app_type="hitter"):
     except Exception:
         return []
 
-@st.cache_data(ttl=3600, show_spinner=False)
 def load_player_data(player_name, team_name, app_type="hitter", version=0):
     """
     Load data with version control. 
@@ -1134,11 +1133,6 @@ elif app == "NCAA Pitcher":
                                 # Store edits in session state (persists across pitchers)
                                 for idx in safe_indices:
                                     st.session_state.pitch_edits[idx] = new_tag
-                                
-                                st.session_state.data_version += 1
-                                
-                                # ✅ THE KEY FIX: Clear the load_player_data cache completely
-                                load_player_data.clear()
                                 
                                 st.success(f"✅ Tagged {len(safe_indices)} pitches as {new_tag}")
                                 st.rerun()
