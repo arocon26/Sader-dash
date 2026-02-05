@@ -1127,22 +1127,29 @@ elif app == "NCAA Pitcher":
                         if not pts: 
                             return
                         
-                        # Extract indices from customdata with robust error handling
+                        # DEBUG: Show what we're getting
+                        st.write(f"DEBUG: Found {len(pts)} points")
+                        
+                        # Extract indices with explicit error handling
                         safe_indices = []
                         for p in pts:
                             try:
-                                # Check if customdata exists and has data
-                                if "customdata" in p and p["customdata"] is not None:
-                                    # Handle both list and numpy array formats
+                                if "customdata" in p:
                                     cd = p["customdata"]
-                                    if hasattr(cd, '__len__') and len(cd) > 0:
+                                    st.write(f"DEBUG customdata: {cd}, type: {type(cd)}")
+                                    
+                                    # Try to get first element
+                                    if isinstance(cd, (list, tuple, np.ndarray)) and len(cd) > 0:
                                         idx = int(cd[0])
                                         safe_indices.append(idx)
-                            except (ValueError, TypeError, IndexError, KeyError) as e:
-                                # Only show warning if it's not just "0" (which means the index itself is 0)
-                                if str(e) != "0":
-                                    st.warning(f"⚠️ Skipped invalid point: {e}")
+                                        st.write(f"✅ Got index: {idx}")
+                                    else:
+                                        st.write(f"❌ customdata wrong format: {cd}")
+                            except Exception as e:
+                                st.error(f"Error extracting index: {e}")
                                 continue
+                        
+                        st.write(f"DEBUG: Extracted {len(safe_indices)} valid indices")
                         
                         if safe_indices:
                             st.info(f"🔍 Selected {len(safe_indices)} pitches")
@@ -1157,12 +1164,13 @@ elif app == "NCAA Pitcher":
                             with c2:
                                 st.write("") 
                                 if st.button(f"✅ Apply", key=f"btn_{chart_name}"):
-                                    # Store edits in session state
                                     for idx in safe_indices:
                                         st.session_state.pitch_edits[idx] = new_tag
                                     
                                     st.success(f"✅ Tagged {len(safe_indices)} pitches as {new_tag}")
                                     st.rerun()
+                        else:
+                            st.warning("⚠️ Could not extract indices from selection. Check DEBUG output above.")
 
                 # 1. MOVEMENT PROFILE
                 st.subheader("Interactive Movement Profile (IVB vs HB)")
