@@ -1046,42 +1046,44 @@ elif app == "NCAA Pitcher":
 
     # --- TAB 2: STUFF VISUALS ---
     with tab2:
-        # --- ADMIN: COMMIT CHANGES ---
+        # --- ADMIN: COMMIT CHANGES AT TOP ---
         if st.session_state.get("is_admin", False):
             edits_count = len(st.session_state.pitch_edits)
             if edits_count > 0:
-                st.warning(f"⚠️ You have {edits_count} unsaved edits in memory.")
+                st.warning(f"⚠️ You have {edits_count} unsaved edits across all pitchers.")
                 
                 col_d1, col_d2 = st.columns([3, 1])
                 with col_d1:
-                    st.write("Click to generate the final file with all your changes applied.")
+                    st.write("When you're done editing ALL pitchers, click below to generate the final file.")
                 with col_d2:
                     if st.button("💾 Prepare Download", key="ncaa_download_btn"):
-                        with st.spinner("Applying edits to master file..."):
+                        with st.spinner("Applying all edits to master file..."):
                             path = get_local_data_path()
-                            if os.path.exists("ncaa_data_2025.parquet"):
-                                path = "ncaa_data_2025.parquet"
                             master_df = pd.read_parquet(path)
                             
+                            # Apply ALL edits from session state
                             for idx, new_tag in st.session_state.pitch_edits.items():
                                 if idx in master_df.index:
                                     master_df.at[idx, 'TaggedPitchType'] = new_tag
                             
+                            # Save to local file
                             master_df.to_parquet("ncaa_data_2025_fixed.parquet", index=False)
                             st.session_state.file_ready = True
+                            st.success(f"✅ Applied {edits_count} edits! Download button appeared below.")
                 
                 if st.session_state.get("file_ready"):
                     with open("ncaa_data_2025_fixed.parquet", "rb") as f:
                         st.download_button(
-                            label="⬇️ Download New Dataset",
+                            label="⬇️ Download Fixed Dataset",
                             data=f,
-                            file_name="ncaa_data_2025.parquet",
+                            file_name="ncaa_data_2025_fixed.parquet",
                             mime="application/octet-stream",
                             key="ncaa_dl_file"
                         )
+                    st.info("📤 Upload this file to your Hugging Face dataset to replace the old one.")
 
         if not data.empty:
-            # Apply session edits directly to data (no filtering)
+            # Use data that ALREADY has session edits applied (from line 976)
             display_data = data.copy()
             
             # Numeric conversion for charts
@@ -1129,10 +1131,13 @@ elif app == "NCAA Pitcher":
                         with c2:
                             st.write("") 
                             if st.button(f"✅ Apply", key=f"btn_{chart_name}"):
+                                # Store edits in session state (persists across pitchers)
                                 for idx in safe_indices:
                                     st.session_state.pitch_edits[idx] = new_tag
                                 
-                                st.session_state.data_version += 1  # ✅ ADD THIS LINE - Forces cache refresh
+                                # Increment version to force data reload with edits
+                                st.session_state.data_version += 1
+                                
                                 st.success(f"✅ Tagged {len(safe_indices)} pitches as {new_tag}")
                                 st.rerun()
 
