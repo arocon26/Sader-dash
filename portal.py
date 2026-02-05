@@ -12,6 +12,10 @@ from huggingface_hub import hf_hub_download
 if 'data_version' not in st.session_state:
     st.session_state.data_version = 0
 
+# --- INIT SESSION STATE ---
+if 'pitch_edits' not in st.session_state:
+    st.session_state.pitch_edits = {} # Stores {index: 'NewTag'}
+
 # --- 1. PAGE CONFIGURATION ---
 st.set_page_config(layout="wide", page_title="Sader Dash")
 
@@ -968,7 +972,21 @@ elif app == "NCAA Pitcher":
     sel_pitcher_raw = ', '.join(sel_pitcher_fmt.split(' ')[::-1]) if ' ' in sel_pitcher_fmt else sel_pitcher_fmt
 
     # 3. Load Data (ONCE for all tabs)
-    data = load_player_data(sel_pitcher_raw, sel_team, "pitcher", version=st.session_state.data_version)
+    # 3. Load Data (Base File)
+    # We use the standard loader (no version hacks needed anymore)
+    data_raw = load_player_data(sel_pitcher_raw, sel_team, "pitcher")
+    
+    # --- INSTANT PREVIEW PATCHER ---
+    # This applies your edits from RAM onto the data immediately
+    data = data_raw.copy() # Work on a copy so we don't break the cache
+    if not data.empty and st.session_state.pitch_edits:
+        # Check if any of the edited pitches belong to this player
+        edited_indices = [i for i in st.session_state.pitch_edits.keys() if i in data.index]
+        if edited_indices:
+            for idx in edited_indices:
+                data.at[idx, 'TaggedPitchType'] = st.session_state.pitch_edits[idx]
+            # Optional: Toast notification that edits are active
+            # st.toast(f"Applying {len(edited_indices)} edits from memory.")
 
     # --- BIO HEADER ---
     if not data.empty:
@@ -1040,6 +1058,43 @@ elif app == "NCAA Pitcher":
 
     # --- TAB 2: STUFF VISUALS ---
     with tab2:
+        # --- ADMIN: COMMIT CHANGES ---
+        if st.session_state.get("is_admin", False):
+            edits_count = len(st.session_state.pitch_edits)
+            if edits_count > 0:
+                st.warning(f"⚠️ You have {edits_count} unsaved edits in memory.")
+                
+                col_d1, col_d2 = st.columns([3, 1])
+                with col_d1:
+                    st.write("Click to generate the final file with all your changes applied.")
+                with col_d2:
+                    # Logic to apply ALL edits to the MASTER file
+                    if st.button("💾 Prepare Download"):
+                        with st.spinner("Applying edits to master file..."):
+                            # 1. Load the REAL master file
+                            path = get_local_data_path()
+                            if os.path.exists("ncaa_data_2025.parquet"):
+                                path = "ncaa_data_2025.parquet"
+                            master_df = pd.read_parquet(path)
+                            
+                            # 2. Apply ALL session edits
+                            for idx, new_tag in st.session_state.pitch_edits.items():
+                                if idx in master_df.index:
+                                    master_df.at[idx, 'TaggedPitchType'] = new_tag
+                            
+                            # 3. Save to a temporary file for download
+                            master_df.to_parquet("ncaa_data_2025_fixed.parquet", index=False)
+                            st.session_state.file_ready = True
+                
+                if st.session_state.get("file_ready"):
+                    with open("ncaa_data_2025_fixed.parquet", "rb") as f:
+                        st.download_button(
+                            label="⬇️ Download New Dataset",
+                            data=f,
+                            file_name="ncaa_data_2025.parquet",
+                            mime="application/octet-stream"
+                        )
+        
         # Filters (Date Only)
         c1, c2 = st.columns([1, 3]) 
         with c1:
@@ -1064,6 +1119,7 @@ elif app == "NCAA Pitcher":
             else:
                 # --- LOCAL FIXING WIDGET (SAFETY FIRST VERSION) ---
                 # --- LOCAL FIXING WIDGET (FIXED VERSION) ---
+                # --- LOCAL FIXING WIDGET (RAM VERSION) ---
                 def show_admin_fix_widget(selected_data, chart_name):
                     if not st.session_state.get("is_admin", False): return
                     
@@ -1071,7 +1127,7 @@ elif app == "NCAA Pitcher":
                         pts = selected_data["selection"]["points"]
                         if not pts: return
                         
-                        # 1. Robust ID Extraction
+                        # 1. Extract IDs
                         raw_indices = []
                         for p in pts:
                             try:
@@ -1082,61 +1138,28 @@ elif app == "NCAA Pitcher":
                                 raw_indices.append(val)
                             except: pass
                         
-                        safe_indices = []
-                        for i in raw_indices:
-                            try: safe_indices.append(int(i))
-                            except: pass
+                        safe_indices = [int(i) for i in raw_indices if i is not None]
                         
                         if safe_indices:
-                            st.info(f"🔍 Selected {len(safe_indices)} pitches. First 3 IDs: {safe_indices[:3]}...")
+                            st.info(f"🔍 Selected {len(safe_indices)} pitches.")
                             
                             c1, c2 = st.columns([2, 1])
                             with c1:
                                 new_tag = st.selectbox("Change to:", list(PITCH_PALETTE.keys()), key=f"fix_{chart_name}")
                             with c2:
                                 st.write("") 
-                                if st.button(f"✅ Apply Fix", key=f"btn_{chart_name}"):
-                                    success = False # Track success status
-                                    try:
-                                        # Load Master File
-                                        path = get_local_data_path()
-                                        if os.path.exists("ncaa_data_2025.parquet"):
-                                            path = "ncaa_data_2025.parquet"
-                                            
-                                        full_df = pd.read_parquet(path)
-                                        
-                                        # 2. VALIDATE INDICES
-                                        valid_indices = [i for i in safe_indices if i in full_df.index]
-                                        if len(valid_indices) == 0:
-                                            st.error("❌ Error: Indices not found in master file.")
-                                            st.stop() # Stop execution safely
-
-                                        # 3. SAFETY CHECK
-                                        target_pitchers = full_df.loc[valid_indices, 'Pitcher'].unique()
-                                        if len(target_pitchers) > 1 or target_pitchers[0] != sel_pitcher_raw:
-                                            st.error(f"🛑 Name Mismatch! Viewing: {sel_pitcher_raw}")
-                                            st.stop()
-
-                                        # 4. EXECUTE SAVE
-                                        full_df.loc[valid_indices, 'TaggedPitchType'] = new_tag
-                                        full_df.to_parquet("ncaa_data_2025.parquet", index=False)
-                                        
-                                        # 5. CLEAR CACHE
-                                        st.cache_data.clear()
-                                        success = True
-                                        
-                                    except Exception as e: 
-                                        st.error(f"Error: {e}")
+                                # THE CHANGE: Save to Session State (RAM), not Disk
+                                if st.button(f"✅ Preview", key=f"btn_{chart_name}"):
+                                    count = 0
+                                    for idx in safe_indices:
+                                        # Save the edit to our dictionary
+                                        st.session_state.pitch_edits[idx] = new_tag
+                                        count += 1
                                     
-                                    # 6. RERUN OUTSIDE THE TRY/EXCEPT BLOCK
-                                    # 6. RERUN OUTSIDE THE TRY/EXCEPT BLOCK
-                                    if success:
-                                        # Increment version to force a fresh reload
-                                        st.session_state.data_version += 1
-                                        st.success("✅ Fixed! Reloading...")
-                                        import time
-                                        time.sleep(0.5)
-                                        st.rerun()
+                                    st.success(f"Updated {count} pitches in preview!")
+                                    import time
+                                    time.sleep(0.2)
+                                    st.rerun() # Refresh immediately to show green dots
 
                 # 1. MOVEMENT PROFILE
                 st.subheader("Interactive Movement Profile (IVB vs HB)")
