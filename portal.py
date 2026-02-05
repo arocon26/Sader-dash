@@ -970,8 +970,6 @@ elif app == "NCAA Pitcher":
 
     data_raw = load_player_data(sel_pitcher_raw, sel_team, "pitcher", version=st.session_state.data_version)
 
-    # Apply any in-memory edits
-    # 3. Load Data (Base File)
     data = data_raw.copy()
     if st.session_state.pitch_edits:
         for idx, new_tag in st.session_state.pitch_edits.items():
@@ -1085,10 +1083,6 @@ elif app == "NCAA Pitcher":
         if not data.empty:
             # Apply session edits directly to data (no filtering)
             display_data = data.copy()
-            if st.session_state.pitch_edits:
-                for idx, new_tag in st.session_state.pitch_edits.items():
-                    if idx in display_data.index:
-                        display_data.at[idx, 'TaggedPitchType'] = new_tag
             
             # Numeric conversion for charts
             for col in ['RelSpeed', 'SpinRate', 'InducedVertBreak', 'HorzBreak', 'PlateLocSide', 'PlateLocHeight']:
@@ -1138,6 +1132,7 @@ elif app == "NCAA Pitcher":
                                 for idx in safe_indices:
                                     st.session_state.pitch_edits[idx] = new_tag
                                 
+                                st.session_state.data_version += 1  # ✅ ADD THIS LINE - Forces cache refresh
                                 st.success(f"✅ Tagged {len(safe_indices)} pitches as {new_tag}")
                                 st.rerun()
 
