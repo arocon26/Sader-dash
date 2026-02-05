@@ -1059,6 +1059,7 @@ elif app == "NCAA Pitcher":
                 st.warning("No data found for this date range.")
             else:
                 # --- LOCAL FIXING WIDGET (SAFETY FIRST VERSION) ---
+                # --- LOCAL FIXING WIDGET (FIXED VERSION) ---
                 def show_admin_fix_widget(selected_data, chart_name):
                     if not st.session_state.get("is_admin", False): return
                     
@@ -1094,36 +1095,32 @@ elif app == "NCAA Pitcher":
                                     try:
                                         # Load Master File
                                         path = get_local_data_path()
-                                        # Safety check: ensure we prioritize local file if it exists
                                         if os.path.exists("ncaa_data_2025.parquet"):
                                             path = "ncaa_data_2025.parquet"
                                             
                                         full_df = pd.read_parquet(path)
                                         
-                                        # 2. VALIDATE INDICES EXIST
+                                        # 2. VALIDATE INDICES
                                         valid_indices = [i for i in safe_indices if i in full_df.index]
                                         if len(valid_indices) == 0:
                                             st.error("❌ Error: Indices not found in master file.")
                                             return
 
-                                        # 3. *** CORRUPTION GUARDRAIL ***
-                                        # Check if the rows we are about to edit belong to the selected pitcher
-                                        # 'sel_pitcher_raw' is the variable from the outer scope (e.g. "O'Connor, Andrew")
+                                        # 3. SAFETY CHECK
                                         target_pitchers = full_df.loc[valid_indices, 'Pitcher'].unique()
-                                        
                                         if len(target_pitchers) > 1 or target_pitchers[0] != sel_pitcher_raw:
-                                            st.error(f"🛑 CRITICAL SAFETY STOP: Name Mismatch! \n\n"
-                                                     f"You are viewing: {sel_pitcher_raw}\n"
-                                                     f"Target file rows belong to: {target_pitchers}\n\n"
-                                                     f"The update was blocked to prevent database corruption.")
+                                            st.error(f"🛑 CRITICAL SAFETY STOP: Name Mismatch! \n"
+                                                     f"Viewing: {sel_pitcher_raw} vs Target: {target_pitchers}")
                                             return
 
                                         # 4. EXECUTE SAVE
                                         full_df.loc[valid_indices, 'TaggedPitchType'] = new_tag
                                         full_df.to_parquet("ncaa_data_2025.parquet", index=False)
                                         
+                                        # 5. CLEAR CACHE & REFRESH (The Fix!)
                                         st.cache_data.clear()
-                                        st.success("✅ Fixed! Download below.")
+                                        st.toast(f"✅ Success! Updated {len(valid_indices)} pitches to {new_tag}.", icon="💾")
+                                        st.rerun()
                                         
                                     except Exception as e: 
                                         st.error(f"Error: {e}")
