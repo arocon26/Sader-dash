@@ -1301,42 +1301,72 @@ elif app == "NCAA Pitcher":
 
         def plot_pie_chart(df, mask_type):
             df = df.copy()
+            # Ensure balls/strikes are integers
             df['Balls'] = pd.to_numeric(df['Balls'], errors='coerce').fillna(-1).astype(int)
             df['Strikes'] = pd.to_numeric(df['Strikes'], errors='coerce').fillna(-1).astype(int)
+            
+            # --- LOGIC UPDATES HERE ---
             if mask_type == "first":
+                # First Pitch (0-0)
                 mask = (df['Balls'] == 0) & (df['Strikes'] == 0)
-            elif mask_type == "hitter":
-                mask = (df['Balls'] > df['Strikes'])
-            elif mask_type == "pitcher":
-                mask = (df['Strikes'] > df['Balls'])
+            
+            elif mask_type == "strike_getters":
+                # Specific counts: 0-1 OR 1-2
+                mask = ((df['Balls'] == 0) & (df['Strikes'] == 1)) | \
+                       ((df['Balls'] == 1) & (df['Strikes'] == 2))
+            
+            elif mask_type == "hitter_excl_30":
+                # Hitter's Count (Balls > Strikes), EXCLUDING 3-0
+                is_hitter_count = (df['Balls'] > df['Strikes'])
+                is_3_0 = (df['Balls'] == 3) & (df['Strikes'] == 0)
+                mask = is_hitter_count & (~is_3_0)
+            
             else:
                 mask = pd.Series([True] * len(df))
+            
+            # --- PLOTTING ---
             usage = df.loc[mask, 'TaggedPitchType'].value_counts()
-            fig, ax = plt.subplots(figsize=(3, 3))  # All pies same size
+            
             if not usage.empty:
+                fig, ax = plt.subplots(figsize=(3, 3))
                 colors = [pitch_palette.get(pt, 'grey') for pt in usage.index]
+                
                 wedges, texts, autotexts = ax.pie(
                     usage,
-                    labels=None,  # No labels on slices
+                    labels=None,
                     autopct='%1.1f%%',
                     colors=colors,
                     startangle=140,
                     textprops={'fontsize': 12}
                 )
-                ax.axis('equal')  # Always a perfect circle
+                ax.axis('equal')
+                
+                # Make percentage text readable
                 for autotext in autotexts:
-                    autotext.set_fontsize(12)
+                    autotext.set_color('white')
+                    autotext.set_weight('bold')
+                    autotext.set_fontsize(10)
+                    # Add a slight outline for contrast against light colors
+                    autotext.set_path_effects([
+                        import_matplotlib_patheffects().withStroke(linewidth=2, foreground='black')
+                    ])
+
                 ax.set_title("", fontsize=12)
                 plt.tight_layout()
                 return fig
             else:
-                plt.close(fig)
                 return None
 
+        # Helper to import path effects locally to avoid global import issues
+        def import_matplotlib_patheffects():
+            import matplotlib.patheffects as path_effects
+            return path_effects
+
+        # Define the 3 requested charts
         chart_types = [
-            ("first", "First Pitch"),
-            ("hitter", "Hitter's Count"),
-            ("pitcher", "Pitcher's Ahead")
+            ("first", "First Pitch (0-0)"),
+            ("strike_getters", "0-1 & 1-2 Counts"),
+            ("hitter_excl_30", "Hitter's Count (Excl. 3-0)")
         ]
 
         col1, col2 = st.columns(2)
@@ -1353,14 +1383,14 @@ elif app == "NCAA Pitcher":
                 if fig:
                     st.pyplot(fig)
                 else:
-                    st.info(f"No pitch data available for vLHH {chart_title}.")
+                    st.caption(f"No data for {chart_title}")
             with col2:
                 st.markdown(f"**{chart_title}**")
                 fig = plot_pie_chart(vRHH_data, mask_type)
                 if fig:
                     st.pyplot(fig)
                 else:
-                   st.info(f"No pitch data available for vRHH {chart_title}.")
+                   st.caption(f"No data for {chart_title}")
 
     with tab5:
         st.header("Strike Zone Heatmaps")
