@@ -1392,6 +1392,7 @@ elif app == "NCAA Pitcher":
                 else:
                    st.caption(f"No data for {chart_title}")
 
+    # --- TAB 5: HEATMAPS ---
     with tab5:
         st.header("Strike Zone Heatmaps")
         st.caption("Visualizing pitch density and location strategy.")
@@ -1400,30 +1401,50 @@ elif app == "NCAA Pitcher":
         import matplotlib.pyplot as plt
         import seaborn as sns
 
-        # --- 1. DATA PREPARATION (Fixing the Numeric Error) ---
+        # --- 1. DATA PREPARATION ---
         df_heat = data.copy()
 
-        # Force critical columns to numeric to prevent "categorical" errors
-        plot_cols = ["PlateLocSide", "PlateLocHeight", "ExitSpeed"]
-        for col in plot_cols:
+        # Force numeric columns
+        numeric_cols = ["PlateLocSide", "PlateLocHeight", "ExitSpeed", "Balls", "Strikes"]
+        for col in numeric_cols:
             df_heat[col] = pd.to_numeric(df_heat[col], errors='coerce')
 
-        # Drop rows without location data (KDE plots will fail without coordinates)
+        # Drop rows without location data (KDE plots fail without coordinates)
         df_heat = df_heat.dropna(subset=["PlateLocSide", "PlateLocHeight"])
 
-        # --- 2. HEATMAP FILTERS ---
-        h_col1, h_col2 = st.columns(2)
+        # --- 2. FILTERS ---
+        h_col1, h_col2, h_col3 = st.columns(3)
+        
         with h_col1:
             map_types = ["All Pitches", "Whiffs", "Hard Hit (95+)", "Softly Hit (<80)", "Chases", "Called Strikes"]
-            map_sel = st.selectbox("Select Metric", map_types, key="hmap_metric_final")
+            map_sel = st.selectbox("Metric", map_types, key="hmap_metric_final")
+        
         with h_col2:
+            situation_opts = ["All Counts", "First Pitch (0-0)", "0-1 & 1-2 Counts", "Hitter's Count (Excl. 3-0)"]
+            sit_sel = st.selectbox("Situation", situation_opts, key="hmap_situation")
+
+        with h_col3:
             side_sel = st.radio("Batter Side", ["Combined", "Left", "Right"], horizontal=True, key="hmap_side_final")
 
-        # Filter by Batter Side
+        # --- 3. APPLY FILTERS ---
+
+        # A. Batter Side
         if side_sel != "Combined":
             df_heat = df_heat[df_heat["BatterSide"] == side_sel]
 
-        # Filter by Event Type
+        # B. Count Situation
+        if sit_sel == "First Pitch (0-0)":
+            df_heat = df_heat[(df_heat['Balls'] == 0) & (df_heat['Strikes'] == 0)]
+        elif sit_sel == "0-1 & 1-2 Counts":
+            mask = ((df_heat['Balls'] == 0) & (df_heat['Strikes'] == 1)) | \
+                   ((df_heat['Balls'] == 1) & (df_heat['Strikes'] == 2))
+            df_heat = df_heat[mask]
+        elif sit_sel == "Hitter's Count (Excl. 3-0)":
+            is_hitter = (df_heat['Balls'] > df_heat['Strikes'])
+            is_30 = (df_heat['Balls'] == 3) & (df_heat['Strikes'] == 0)
+            df_heat = df_heat[is_hitter & (~is_30)]
+
+        # C. Metric (Event Type)
         if map_sel == "All Pitches":
             df_event = df_heat
         elif map_sel == "Whiffs":
@@ -1432,63 +1453,63 @@ elif app == "NCAA Pitcher":
             df_event = df_heat[df_heat["ExitSpeed"] >= 95]
         elif map_sel == "Softly Hit (<80)":
             df_event = df_heat[df_heat["ExitSpeed"] <= 80]
+        elif map_sel == "Called Strikes":
+            df_event = df_heat[df_heat["PitchCall"] == "StrikeCalled"]
         elif map_sel == "Chases":
             swing_calls = ["strikeswinging", "foul", "inplay"]
-            # Strike Zone is roughly -0.83 to 0.83 horizontally, 1.5 to 3.5 vertically
+            # Standard Zone: width 17", height usually 1.5-3.5
             in_zone = df_heat["PlateLocSide"].between(-0.83, 0.83) & df_heat["PlateLocHeight"].between(1.5, 3.5)
             df_event = df_heat[df_heat["PitchCall"].str.lower().isin(swing_calls) & ~in_zone]
-        else: # Called Strikes
-            df_event = df_heat[df_heat["PitchCall"] == "StrikeCalled"]
-
-        # --- 3. RENDER HEATMAPS ---
+        
+        # --- 4. RENDER HEATMAPS ---
         if df_event.empty:
-            st.warning(f"No data points found for {map_sel} vs {side_sel} hitters.")
+            st.warning(f"No data points found for **{map_sel}** in **{sit_sel}** vs **{side_sel}** hitters.")
         else:
-            # Get top 5 pitch types by frequency
-            top5_pitches = df_event["TaggedPitchType"].value_counts().index.tolist()[:5]
+            # Get top pitch types (max 5)
+            top_pitches = df_event["TaggedPitchType"].value_counts().index.tolist()
+            if len(top_pitches) > 5: top_pitches = top_pitches[:5]
             
-            # Create columns based on how many pitch types exist
-            h_cols = st.columns(len(top5_pitches))
+            # Dynamic columns based on number of pitch types
+            cols = st.columns(len(top_pitches))
             
-            for i, col in enumerate(h_cols):
+            for i, col in enumerate(cols):
+                pt_type = top_pitches[i]
+                subset = df_event[df_event["TaggedPitchType"] == pt_type]
+                
                 with col:
-                    pt_type = top5_pitches[i]
-                    subset = df_event[df_event["TaggedPitchType"] == pt_type]
-
-                    # Create the Matplotlib Figure
-                    fig, ax = plt.subplots(figsize=(4, 5))
+                    # Create Figure
+                    fig, ax = plt.subplots(figsize=(3, 4))
                     
-                    # Draw Strike Zone (Black Outline)
-                    ax.add_patch(Rectangle((-0.83, 1.5), 1.66, 2.0, 
-                                        fill=False, edgecolor="black", linewidth=2.5, zorder=10))
+                    # Draw Strike Zone
+                    ax.add_patch(Rectangle((-0.83, 1.5), 1.66, 2.0, fill=False, edgecolor="black", lw=2, zorder=2))
                     
-                    # Draw Home Plate at the bottom for orientation
+                    # Draw Home Plate
                     ax.plot([-0.83, 0.83, 0.83, 0, -0.83, -0.83], [0, 0, 0.15, 0.3, 0.15, 0], color="black", lw=1.5)
 
+                    # KDE Plot (Density)
                     if len(subset) < 5:
-                        ax.text(0.5, 0.5, "Not Enough\nData", ha="center", va="center", transform=ax.transAxes, fontsize=12)
+                        ax.text(0.5, 0.5, "Not Enough\nData", ha="center", va="center", transform=ax.transAxes)
                     else:
-                        # Create Density Plot
                         sns.kdeplot(
                             x=subset["PlateLocSide"],
                             y=subset["PlateLocHeight"],
                             fill=True,
-                            levels=10,
-                            thresh=0.02,
-                            bw_adjust=0.7,
-                            cmap="Reds",
+                            thresh=0.05,    # Lowest density to show
+                            levels=10,      # Number of contour levels
+                            cmap="Reds",    # Color map
+                            alpha=0.7,
                             ax=ax,
-                            alpha=0.7
+                            cut=1.5         # How far past data to draw
                         )
 
-                    # Visual Settings
-                    ax.set_xlim(-2.5, 2.5) # Wide enough to see "Chase" pitches
-                    ax.set_ylim(0, 5)
-                    ax.set_xticks([]); ax.set_yticks([])
-                    ax.set_title(f"{pt_type}\n(n={len(subset)})", fontsize=14, fontweight='bold')
+                    # Styling
+                    ax.set_xlim(-2.0, 2.0)
+                    ax.set_ylim(0, 5.0)
+                    ax.axis('off')
+                    ax.set_title(f"{pt_type}\n(n={len(subset)})", fontsize=12, fontweight='bold')
                     
                     st.pyplot(fig)
-                    plt.close(fig) # Memory management
+                    plt.close(fig)
 
     with tab6:
         st.subheader("📈 Season Trends")
