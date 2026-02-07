@@ -1393,6 +1393,7 @@ elif app == "NCAA Pitcher":
                    st.caption(f"No data for {chart_title}")
 
     # --- TAB 5: HEATMAPS ---
+    # --- TAB 5: HEATMAPS ---
     with tab5:
         st.header("Strike Zone Heatmaps")
         st.caption("Visualizing pitch density and location strategy.")
@@ -1427,7 +1428,6 @@ elif app == "NCAA Pitcher":
             side_sel = st.radio("Batter Side", ["Combined", "Left", "Right"], horizontal=True, key="hmap_side_final")
 
         # --- 3. APPLY FILTERS ---
-
         # A. Batter Side
         if side_sel != "Combined":
             df_heat = df_heat[df_heat["BatterSide"] == side_sel]
@@ -1461,15 +1461,56 @@ elif app == "NCAA Pitcher":
             in_zone = df_heat["PlateLocSide"].between(-0.83, 0.83) & df_heat["PlateLocHeight"].between(1.5, 3.5)
             df_event = df_heat[df_heat["PitchCall"].str.lower().isin(swing_calls) & ~in_zone]
         
+        # --- helper function to draw heatmap ---
+        def plot_heatmap(subset, title_text, ax):
+            # Draw Strike Zone
+            ax.add_patch(Rectangle((-0.83, 1.5), 1.66, 2.0, fill=False, edgecolor="black", lw=2, zorder=2))
+            # Draw Home Plate
+            ax.plot([-0.83, 0.83, 0.83, 0, -0.83, -0.83], [0, 0, 0.15, 0.3, 0.15, 0], color="black", lw=1.5)
+
+            if len(subset) < 5:
+                ax.text(0.5, 0.5, "Not Enough\nData", ha="center", va="center", transform=ax.transAxes)
+            else:
+                sns.kdeplot(
+                    x=subset["PlateLocSide"],
+                    y=subset["PlateLocHeight"],
+                    fill=True,
+                    thresh=0.05,
+                    levels=10,
+                    cmap="Reds",
+                    alpha=0.7,
+                    ax=ax,
+                    cut=1.5
+                )
+            
+            ax.set_xlim(-2.0, 2.0)
+            ax.set_ylim(0, 5.0)
+            ax.axis('off')
+            ax.set_title(title_text, fontsize=12, fontweight='bold')
+
         # --- 4. RENDER HEATMAPS ---
         if df_event.empty:
             st.warning(f"No data points found for **{map_sel}** in **{sit_sel}** vs **{side_sel}** hitters.")
         else:
-            # Get top pitch types (max 5)
+            # --- SECTION A: TOTAL HEATMAP ---
+            st.markdown("### Total Heatmap")
+            
+            # Use columns to control size (otherwise it stretches too wide)
+            tot_col1, tot_col2, tot_col3 = st.columns([1, 1, 2])
+            with tot_col1:
+                fig_total, ax_total = plt.subplots(figsize=(3, 4))
+                plot_heatmap(df_event, f"Combined Total\n(n={len(df_event)})", ax_total)
+                st.pyplot(fig_total)
+                plt.close(fig_total)
+
+            st.divider()
+
+            # --- SECTION B: BREAKDOWN BY PITCH TYPE ---
+            st.markdown("### Breakdown by Pitch Type")
+            
             top_pitches = df_event["TaggedPitchType"].value_counts().index.tolist()
             if len(top_pitches) > 5: top_pitches = top_pitches[:5]
             
-            # Dynamic columns based on number of pitch types
             cols = st.columns(len(top_pitches))
             
             for i, col in enumerate(cols):
@@ -1477,37 +1518,8 @@ elif app == "NCAA Pitcher":
                 subset = df_event[df_event["TaggedPitchType"] == pt_type]
                 
                 with col:
-                    # Create Figure
                     fig, ax = plt.subplots(figsize=(3, 4))
-                    
-                    # Draw Strike Zone
-                    ax.add_patch(Rectangle((-0.83, 1.5), 1.66, 2.0, fill=False, edgecolor="black", lw=2, zorder=2))
-                    
-                    # Draw Home Plate
-                    ax.plot([-0.83, 0.83, 0.83, 0, -0.83, -0.83], [0, 0, 0.15, 0.3, 0.15, 0], color="black", lw=1.5)
-
-                    # KDE Plot (Density)
-                    if len(subset) < 5:
-                        ax.text(0.5, 0.5, "Not Enough\nData", ha="center", va="center", transform=ax.transAxes)
-                    else:
-                        sns.kdeplot(
-                            x=subset["PlateLocSide"],
-                            y=subset["PlateLocHeight"],
-                            fill=True,
-                            thresh=0.05,    # Lowest density to show
-                            levels=10,      # Number of contour levels
-                            cmap="Reds",    # Color map
-                            alpha=0.7,
-                            ax=ax,
-                            cut=1.5         # How far past data to draw
-                        )
-
-                    # Styling
-                    ax.set_xlim(-2.0, 2.0)
-                    ax.set_ylim(0, 5.0)
-                    ax.axis('off')
-                    ax.set_title(f"{pt_type}\n(n={len(subset)})", fontsize=12, fontweight='bold')
-                    
+                    plot_heatmap(subset, f"{pt_type}\n(n={len(subset)})", ax)
                     st.pyplot(fig)
                     plt.close(fig)
 
