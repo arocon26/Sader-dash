@@ -1393,8 +1393,6 @@ elif app == "NCAA Pitcher":
                    st.caption(f"No data for {chart_title}")
 
     # --- TAB 5: HEATMAPS ---
-    # --- TAB 5: HEATMAPS ---
-    # --- TAB 5: HEATMAPS ---
     with tab5:
         st.header("Strike Zone Heatmaps (Hitter's POV)")
         st.caption("Visualizing pitch density from the Hitter's perspective (flipped).")
@@ -1415,7 +1413,7 @@ elif app == "NCAA Pitcher":
         df_heat = df_heat.dropna(subset=["PlateLocSide", "PlateLocHeight"])
 
         # --- CRITICAL CHANGE: FLIP TO HITTER POV ---
-        # Standard data is Catcher POV. Multiply X by -1 to see it as the Hitter sees it.
+        # 1. Flip Left/Right (X-axis)
         df_heat["PlateLocSide"] = -1 * df_heat["PlateLocSide"]
 
         # --- 2. FILTERS ---
@@ -1433,11 +1431,9 @@ elif app == "NCAA Pitcher":
             side_sel = st.radio("Batter Side", ["Combined", "Left", "Right"], horizontal=True, key="hmap_side_final")
 
         # --- 3. APPLY FILTERS ---
-        # A. Batter Side
         if side_sel != "Combined":
             df_heat = df_heat[df_heat["BatterSide"] == side_sel]
 
-        # B. Count Situation
         if sit_sel == "First Pitch (0-0)":
             df_heat = df_heat[(df_heat['Balls'] == 0) & (df_heat['Strikes'] == 0)]
         elif sit_sel == "0-1 & 1-2 Counts":
@@ -1449,7 +1445,6 @@ elif app == "NCAA Pitcher":
             is_30 = (df_heat['Balls'] == 3) & (df_heat['Strikes'] == 0)
             df_heat = df_heat[is_hitter & (~is_30)]
 
-        # C. Metric (Event Type)
         if map_sel == "All Pitches":
             df_event = df_heat
         elif map_sel == "Whiffs":
@@ -1462,16 +1457,21 @@ elif app == "NCAA Pitcher":
             df_event = df_heat[df_heat["PitchCall"] == "StrikeCalled"]
         elif map_sel == "Chases":
             swing_calls = ["strikeswinging", "foul", "inplay"]
-            # Standard Zone (Now flipped, but symmetric so range is same): -0.83 to 0.83
+            # Note: Since we flipped X, the zone is still symmetric (-0.83 to 0.83)
             in_zone = df_heat["PlateLocSide"].between(-0.83, 0.83) & df_heat["PlateLocHeight"].between(1.5, 3.5)
             df_event = df_heat[df_heat["PitchCall"].str.lower().isin(swing_calls) & ~in_zone]
         
-        # --- helper function to draw heatmap ---
+        # --- HELPER: DRAW HEATMAP (FLIPPED PLATE) ---
         def plot_heatmap(subset, title_text, ax):
             # Draw Strike Zone
             ax.add_patch(Rectangle((-0.83, 1.5), 1.66, 2.0, fill=False, edgecolor="black", lw=2, zorder=2))
-            # Draw Home Plate
-            ax.plot([-0.83, 0.83, 0.83, 0, -0.83, -0.83], [0, 0, 0.15, 0.3, 0.15, 0], color="black", lw=1.5)
+            
+            # --- FLIPPED HOME PLATE FOR HITTER POV ---
+            # Point goes UP (y > 0), flat side is at y=0 or slightly below
+            # Coordinates: [Left, Right, Right-Back, Point, Left-Back, Left]
+            plate_x = [-0.83, 0.83, 0.83, 0, -0.83, -0.83]
+            plate_y = [0, 0, -0.15, -0.3, -0.15, 0] # Negative Y puts it "in front" of the hitter
+            ax.plot(plate_x, plate_y, color="black", lw=1.5)
 
             if len(subset) < 5:
                 ax.text(0.5, 0.5, "Not Enough\nData", ha="center", va="center", transform=ax.transAxes)
@@ -1489,7 +1489,7 @@ elif app == "NCAA Pitcher":
                 )
             
             ax.set_xlim(-2.0, 2.0)
-            ax.set_ylim(0, 5.0)
+            ax.set_ylim(-0.5, 5.0) # Adjusted Y-lim to show the plate point
             ax.axis('off')
             ax.set_title(title_text, fontsize=12, fontweight='bold')
 
