@@ -1394,9 +1394,10 @@ elif app == "NCAA Pitcher":
 
     # --- TAB 5: HEATMAPS ---
     # --- TAB 5: HEATMAPS ---
+    # --- TAB 5: HEATMAPS ---
     with tab5:
-        st.header("Strike Zone Heatmaps")
-        st.caption("Visualizing pitch density and location strategy.")
+        st.header("Strike Zone Heatmaps (Hitter's POV)")
+        st.caption("Visualizing pitch density from the Hitter's perspective (flipped).")
 
         from matplotlib.patches import Rectangle
         import matplotlib.pyplot as plt
@@ -1410,8 +1411,12 @@ elif app == "NCAA Pitcher":
         for col in numeric_cols:
             df_heat[col] = pd.to_numeric(df_heat[col], errors='coerce')
 
-        # Drop rows without location data (KDE plots fail without coordinates)
+        # Drop rows without location data
         df_heat = df_heat.dropna(subset=["PlateLocSide", "PlateLocHeight"])
+
+        # --- CRITICAL CHANGE: FLIP TO HITTER POV ---
+        # Standard data is Catcher POV. Multiply X by -1 to see it as the Hitter sees it.
+        df_heat["PlateLocSide"] = -1 * df_heat["PlateLocSide"]
 
         # --- 2. FILTERS ---
         h_col1, h_col2, h_col3 = st.columns(3)
@@ -1457,7 +1462,7 @@ elif app == "NCAA Pitcher":
             df_event = df_heat[df_heat["PitchCall"] == "StrikeCalled"]
         elif map_sel == "Chases":
             swing_calls = ["strikeswinging", "foul", "inplay"]
-            # Standard Zone: width 17", height usually 1.5-3.5
+            # Standard Zone (Now flipped, but symmetric so range is same): -0.83 to 0.83
             in_zone = df_heat["PlateLocSide"].between(-0.83, 0.83) & df_heat["PlateLocHeight"].between(1.5, 3.5)
             df_event = df_heat[df_heat["PitchCall"].str.lower().isin(swing_calls) & ~in_zone]
         
@@ -1495,7 +1500,6 @@ elif app == "NCAA Pitcher":
             # --- SECTION A: TOTAL HEATMAP ---
             st.markdown("### Total Heatmap")
             
-            # Use columns to control size (otherwise it stretches too wide)
             tot_col1, tot_col2, tot_col3 = st.columns([1, 1, 2])
             with tot_col1:
                 fig_total, ax_total = plt.subplots(figsize=(3, 4))
