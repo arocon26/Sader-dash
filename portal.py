@@ -1393,6 +1393,7 @@ elif app == "NCAA Pitcher":
                    st.caption(f"No data for {chart_title}")
 
     # --- TAB 5: HEATMAPS ---
+    # --- TAB 5: HEATMAPS ---
     with tab5:
         st.header("Strike Zone Heatmaps (Hitter's POV)")
         st.caption("Visualizing pitch density from the Hitter's perspective (flipped).")
@@ -1424,7 +1425,8 @@ elif app == "NCAA Pitcher":
             map_sel = st.selectbox("Metric", map_types, key="hmap_metric_final")
         
         with h_col2:
-            situation_opts = ["All Counts", "First Pitch (0-0)", "0-1 & 1-2 Counts", "Hitter's Count (Excl. 3-0)"]
+            # --- ADDED 1-1 COUNT HERE ---
+            situation_opts = ["All Counts", "First Pitch (0-0)", "1-1 Count", "0-1 & 1-2 Counts", "Hitter's Count (Excl. 3-0)"]
             sit_sel = st.selectbox("Situation", situation_opts, key="hmap_situation")
 
         with h_col3:
@@ -1434,8 +1436,11 @@ elif app == "NCAA Pitcher":
         if side_sel != "Combined":
             df_heat = df_heat[df_heat["BatterSide"] == side_sel]
 
+        # --- SITUATION LOGIC ---
         if sit_sel == "First Pitch (0-0)":
             df_heat = df_heat[(df_heat['Balls'] == 0) & (df_heat['Strikes'] == 0)]
+        elif sit_sel == "1-1 Count":  # --- NEW LOGIC ---
+            df_heat = df_heat[(df_heat['Balls'] == 1) & (df_heat['Strikes'] == 1)]
         elif sit_sel == "0-1 & 1-2 Counts":
             mask = ((df_heat['Balls'] == 0) & (df_heat['Strikes'] == 1)) | \
                    ((df_heat['Balls'] == 1) & (df_heat['Strikes'] == 2))
@@ -1445,6 +1450,7 @@ elif app == "NCAA Pitcher":
             is_30 = (df_heat['Balls'] == 3) & (df_heat['Strikes'] == 0)
             df_heat = df_heat[is_hitter & (~is_30)]
 
+        # --- METRIC LOGIC ---
         if map_sel == "All Pitches":
             df_event = df_heat
         elif map_sel == "Whiffs":
@@ -1468,7 +1474,6 @@ elif app == "NCAA Pitcher":
             
             # --- FLIPPED HOME PLATE FOR HITTER POV ---
             # Point goes UP (y > 0), flat side is at y=0 or slightly below
-            # Coordinates: [Left, Right, Right-Back, Point, Left-Back, Left]
             plate_x = [-0.83, 0.83, 0.83, 0, -0.83, -0.83]
             plate_y = [0, 0, -0.15, -0.3, -0.15, 0] # Negative Y puts it "in front" of the hitter
             ax.plot(plate_x, plate_y, color="black", lw=1.5)
