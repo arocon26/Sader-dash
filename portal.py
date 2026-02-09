@@ -1310,6 +1310,10 @@ elif app == "NCAA Pitcher":
                 # First Pitch (0-0)
                 mask = (df['Balls'] == 0) & (df['Strikes'] == 0)
             
+            elif mask_type == "one_one":
+                # 1-1 Count
+                mask = (df['Balls'] == 1) & (df['Strikes'] == 1)
+
             elif mask_type == "strike_getters":
                 # Specific counts: 0-1 OR 1-2
                 mask = ((df['Balls'] == 0) & (df['Strikes'] == 1)) | \
@@ -1362,9 +1366,10 @@ elif app == "NCAA Pitcher":
             import matplotlib.patheffects as path_effects
             return path_effects
 
-        # Define the 3 requested charts
+        # Define the 4 requested charts
         chart_types = [
             ("first", "First Pitch (0-0)"),
+            ("one_one", "1-1 Count"),
             ("strike_getters", "0-1 & 1-2 Counts"),
             ("hitter_excl_30", "Hitter's Count (Excl. 3-0)")
         ]
