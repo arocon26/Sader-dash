@@ -1370,7 +1370,7 @@ elif app == "NCAA Pitcher":
         chart_types = [
             ("first", "First Pitch (0-0)"),
             ("one_one", "1-1 Count"),
-            ("strike_getters", "0-1 & 1-2 Counts"),
+            ("strike_getters", "0-2 & 1-2 Counts"),
             ("hitter_excl_30", "Hitter's Count (Excl. 3-0)")
         ]
 
