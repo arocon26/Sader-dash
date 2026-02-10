@@ -1315,8 +1315,8 @@ elif app == "NCAA Pitcher":
                 mask = (df['Balls'] == 1) & (df['Strikes'] == 1)
 
             elif mask_type == "strike_getters":
-                # Specific counts: 0-1 OR 1-2
-                mask = ((df['Balls'] == 0) & (df['Strikes'] == 1)) | \
+                # Specific counts: 0-2 OR 1-2
+                mask = ((df['Balls'] == 0) & (df['Strikes'] == 2)) | \
                        ((df['Balls'] == 1) & (df['Strikes'] == 2))
             
             elif mask_type == "hitter_excl_30":
@@ -1431,7 +1431,7 @@ elif app == "NCAA Pitcher":
         
         with h_col2:
             # --- ADDED 1-1 COUNT HERE ---
-            situation_opts = ["All Counts", "First Pitch (0-0)", "1-1 Count", "0-1 & 1-2 Counts", "Hitter's Count (Excl. 3-0)"]
+            situation_opts = ["All Counts", "First Pitch (0-0)", "1-1 Count", "0-2 & 1-2 Counts", "Hitter's Count (Excl. 3-0)"]
             sit_sel = st.selectbox("Situation", situation_opts, key="hmap_situation")
 
         with h_col3:
@@ -1446,8 +1446,8 @@ elif app == "NCAA Pitcher":
             df_heat = df_heat[(df_heat['Balls'] == 0) & (df_heat['Strikes'] == 0)]
         elif sit_sel == "1-1 Count":  # --- NEW LOGIC ---
             df_heat = df_heat[(df_heat['Balls'] == 1) & (df_heat['Strikes'] == 1)]
-        elif sit_sel == "0-1 & 1-2 Counts":
-            mask = ((df_heat['Balls'] == 0) & (df_heat['Strikes'] == 1)) | \
+        elif sit_sel == "0-2 & 1-2 Counts":
+            mask = ((df_heat['Balls'] == 0) & (df_heat['Strikes'] == 2)) | \
                    ((df_heat['Balls'] == 1) & (df_heat['Strikes'] == 2))
             df_heat = df_heat[mask]
         elif sit_sel == "Hitter's Count (Excl. 3-0)":
