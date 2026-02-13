@@ -6,7 +6,9 @@ import plotly.graph_objects as go
 import plotly.express as px
 import matplotlib.pyplot as plt
 import seaborn as sns
-from huggingface_hub import hf_hub_download
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
+from streamlit_gsheets import GSheetsConnection
 
 # --- INIT SESSION STATE ---
 if 'data_version' not in st.session_state:
@@ -191,6 +193,80 @@ def load_player_data(player_name, team_name, app_type="hitter", version=0):
             'ChangeUp': 'Changeup', 
             'One-Seam Fastball': 'Sinker'
         })
+    
+    return df
+
+# --- NEW ARSENAL FUNCTIONS ---
+
+def get_arsenal_data():
+    """Reads the arsenal database from Google Sheets."""
+    try:
+        conn = st.connection("gsheets", type=GSheetsConnection)
+        # ttl=0 means always get fresh data, don't cache
+        df = conn.read(worksheet="arsenal_db", ttl=0) 
+        return df
+    except:
+        return pd.DataFrame(columns=["Pitcher", "Team", "Arsenal"])
+
+def run_kmeans_retagging(df, arsenal_list):
+    """
+    Takes a pitcher's raw data and a list of pitches they 'actually' throw.
+    Uses K-Means clustering to force the data into those buckets.
+    """
+    if df.empty or len(df) < 5 or not arsenal_list:
+        return df
+
+    # 1. Select Features (Velocity, IVB, HB)
+    features = df[['RelSpeed', 'InducedVertBreak', 'HorzBreak']].dropna()
+    
+    if len(features) < 5: 
+        return df # Not enough data to cluster
+
+    # 2. Standardize (Scale) the data so Velo (90) doesn't overpower Break (10)
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(features)
+
+    # 3. Run K-Means
+    # We look for exactly as many clusters as there are pitches in the arsenal
+    n_clusters = len(arsenal_list)
+    kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
+    
+    # This gives us Cluster IDs (0, 1, 2...)
+    clusters = kmeans.fit_predict(X_scaled)
+    
+    # 4. Map Clusters to Pitch Names
+    # We assume:
+    # - Fastballs are the Fastest
+    # - Breaking balls are Slower + Glove Side Movement
+    # - Offspeed are Slower + Arm Side Movement
+    
+    # To keep it simple for now, we will sort both the Clusters and the Arsenal by VELOCITY.
+    
+    # Get average stats for each cluster
+    df_temp = features.copy()
+    df_temp['Cluster'] = clusters
+    cluster_stats = df_temp.groupby('Cluster')['RelSpeed'].mean().sort_values(ascending=False)
+    
+    # Define a standard velocity order for the Arsenal List
+    # (Fastest to Slowest)
+    velo_order = {
+        'Fastball': 100, 'Four-Seam': 99, 'Sinker': 98, 'One-Seam Fastball': 98, 'Two-Seam Fastball': 98,
+        'Cutter': 92, 'Splitter': 88, 'Changeup': 86, 
+        'Slider': 84, 'Sweeper': 82, 'Curveball': 78, 'Knuckle Curve': 78, 'Knuckleball': 75
+    }
+    
+    # Sort the user's defined arsenal by expected velocity
+    sorted_arsenal = sorted(arsenal_list, key=lambda x: velo_order.get(x, 0), reverse=True)
+    
+    # Map them: Fastest Cluster gets Fastest Pitch Name
+    mapping = {cluster_id: name for cluster_id, name in zip(cluster_stats.index, sorted_arsenal)}
+    
+    # 5. Apply the new names
+    df['AutoTag'] = pd.Series(clusters, index=features.index).map(mapping)
+    
+    # Overwrite the main column? Or keep separate? 
+    # Let's overwrite for the charts to work immediately.
+    df['TaggedPitchType'] = df['AutoTag'].combine_first(df['TaggedPitchType'])
     
     return df
 
@@ -502,7 +578,7 @@ def draw_performance_grid(data, hand):
 
 
 
-app = st.selectbox("Select App", ["Home", "NCAA Hitter", "NCAA Pitcher", "Holy Cross Hitter", "Holy Cross Pitcher"])
+app = st.selectbox("Select App", ["Home", "NCAA Hitter", "NCAA Pitcher", "Holy Cross Hitter", "Holy Cross Pitcher", "Arsenal Manager"])
 
 if app == "Home":
     st.write("## Welcome to Sader Dash! ⚾️ ✝️")
@@ -516,6 +592,71 @@ if app == "Home":
     
     # Stop execution here - no data loading
     st.stop()
+
+elif app == "Arsenal Manager":
+    st.header("🛠 Pitch Arsenal Manager")
+    st.info("Define exactly what each pitcher throws. This helps the app fix mislabeled pitches automatically.")
+    
+    # 1. Login Protection (Optional)
+    check_password() # Uses your existing login function
+    
+    # 2. Load Data
+    conn = st.connection("gsheets", type=GSheetsConnection)
+    try:
+        arsenal_db = conn.read(worksheet="arsenal_db", ttl=0)
+    except:
+        st.error("Could not connect to Google Sheet. Check your secrets.")
+        st.stop()
+
+    # 3. Select Pitcher
+    teams = load_team_names("pitcher")
+    sel_team = st.selectbox("Select Team", teams)
+    
+    pitchers = load_players_for_team(sel_team, "pitcher")
+    sel_pitcher = st.selectbox("Select Pitcher", pitchers)
+
+    # 4. Check for existing arsenal
+    # Clean up name format if needed (Last, First)
+    current_row = arsenal_db[arsenal_db['Pitcher'] == sel_pitcher]
+    
+    current_arsenal = []
+    if not current_row.empty and pd.notna(current_row.iloc[0]['Arsenal']):
+        current_arsenal = current_row.iloc[0]['Arsenal'].split(", ")
+
+    # 5. The Editor
+    st.subheader(f"Arsenal for {sel_pitcher}")
+    
+    possible_pitches = [
+        'Four-Seam', 'Sinker', 'Cutter', 'Slider', 'Sweeper', 
+        'Curveball', 'Knuckle Curve', 'Changeup', 'Splitter'
+    ]
+    
+    new_arsenal = st.multiselect("Select Pitches (Order doesn't matter)", possible_pitches, default=current_arsenal)
+    
+    if st.button("💾 Save Arsenal"):
+        if not new_arsenal:
+            st.error("Please select at least one pitch.")
+        else:
+            # Format as string
+            arsenal_str = ", ".join(new_arsenal)
+            
+            # Prepare new row
+            new_data = pd.DataFrame([{
+                "Pitcher": sel_pitcher,
+                "Team": sel_team,
+                "Arsenal": arsenal_str
+            }])
+            
+            # Remove old entry and add new one
+            updated_df = arsenal_db[arsenal_db['Pitcher'] != sel_pitcher]
+            updated_df = pd.concat([updated_df, new_data], ignore_index=True)
+            
+            # Update Google Sheet
+            conn.update(worksheet="arsenal_db", data=updated_df)
+            st.success(f"Saved! {sel_pitcher} is now locked to: {arsenal_str}")
+            st.cache_data.clear() # Clear cache so main app sees it
+
+
 
 elif app == "NCAA Hitter":
     st.subheader("⚾ NCAA Hitter Stats")
@@ -968,11 +1109,41 @@ elif app == "NCAA Pitcher":
     pitchers_fmt = [' '.join(p.split(', ')[::-1]) if ', ' in p else p for p in pitchers]
     sel_pitcher_fmt = st.sidebar.selectbox("Select Pitcher", pitchers_fmt, key="ncaa_p_player")
     
+    # Convert "Andrew O'Connor" back to "O'Connor, Andrew" for data lookup
     sel_pitcher_raw = ', '.join(sel_pitcher_fmt.split(' ')[::-1]) if ' ' in sel_pitcher_fmt else sel_pitcher_fmt
 
+    # 3. Load Raw Data
     data_raw = load_player_data(sel_pitcher_raw, sel_team, "pitcher", version=st.session_state.data_version)
-
+    
+    # Create a working copy we can modify
     data = data_raw.copy()
+
+    # --- [NEW] AUTO-RETAGGING LOGIC (ARSENAL) ---
+    if not data.empty:
+        # 1. Fetch the Arsenal Database
+        arsenal_df = get_arsenal_data()
+        
+        # 2. Check if this pitcher has a defined arsenal
+        # We look for the raw name (e.g., "O'Connor, Andrew")
+        pitcher_arsenal_row = arsenal_df[arsenal_df['Pitcher'] == sel_pitcher_raw]
+        
+        if not pitcher_arsenal_row.empty and pd.notna(pitcher_arsenal_row.iloc[0]['Arsenal']):
+            # Get the list: ['Four-Seam', 'Slider', 'Changeup']
+            saved_arsenal = pitcher_arsenal_row.iloc[0]['Arsenal'].split(", ")
+            
+            # Show a little notification so you know it's working
+            st.toast(f"🛠 Applying Arsenal: {', '.join(saved_arsenal)}", icon="⚾")
+            
+            # 3. Run K-Means to fix the tags
+            # This overwrites 'TaggedPitchType' with the mathematical best fit
+            data = run_kmeans_retagging(data, saved_arsenal)
+        else:
+            # Optional: Tell the user they are using raw Trackman tags
+            # st.caption("Using raw Trackman tags. Go to 'Arsenal Manager' to customize.")
+            pass
+
+    # --- [EXISTING] MANUAL EDITS (OVERRIDES) ---
+    # This applies your specific "Lasso" fixes on top of the auto-tags
     if st.session_state.pitch_edits:
         for idx, new_tag in st.session_state.pitch_edits.items():
             if idx in data.index:
@@ -988,6 +1159,11 @@ elif app == "NCAA Pitcher":
         st.header(f"{sel_pitcher_fmt} {p_jersey}")
         st.subheader(f"{sel_team} • {p_info['PitcherThrows']}HP")
         st.write(f"**Physicals:** {p_height} | {p_weight}")
+        
+        # Optional: Show the current arsenal being used
+        if 'AutoTag' in data.columns:
+            st.info("✅ **Arsenal Applied:** Pitch types have been auto-corrected based on velocity & movement clustering.")
+            
         st.divider()
 
     # --- TABS ---
