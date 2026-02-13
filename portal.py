@@ -9,6 +9,7 @@ import seaborn as sns
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
 from streamlit_gsheets import GSheetsConnection
+from huggingface_hub import hf_hub_download
 
 # --- INIT SESSION STATE ---
 if 'data_version' not in st.session_state:
