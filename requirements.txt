@@ -8,3 +8,8 @@ pyarrow
 beautifulsoup4
 requests
 fastparquet
+huggingface_hub
+gspread
+oauth2client
+scikit-learn
+streamlit-gsheets
