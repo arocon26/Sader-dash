@@ -12,4 +12,4 @@ huggingface_hub
 gspread
 oauth2client
 scikit-learn
-streamlit-gsheets
+st-gsheets-connection
